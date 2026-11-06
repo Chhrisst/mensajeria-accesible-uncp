@@ -194,51 +194,6 @@ fun AccessibleVoiceRegisterScreen(
                         onClick = { startListeningForName() },
                         leadingIcon = Icons.Default.Mic
                     )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Opciones rápidas de prueba táctil
-                    Text(
-                        text = "O registrar como:",
-                        color = TextSecondaryGray,
-                        fontSize = 14.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        listOf("Christian Beteta", "Miguel Retuerto", "Juan Perez").forEach { name ->
-                            Card(
-                                shape = RoundedCornerShape(14.dp),
-                                colors = CardDefaults.cardColors(containerColor = DarkCardBackground),
-                                border = BorderStroke(1.5.dp, AccessibleYellow),
-                                modifier = Modifier
-                                    .clickable {
-                                        registeredName = name
-                                        feedbackText = "Nombre registrado: $name."
-                                        authViewModel.ttsService.speak(
-                                            "Nombre recibido: $name. Ahora crea tu contraseña de tres toques: toca el lado izquierdo o derecho tres veces."
-                                        )
-                                    }
-                                    .semantics {
-                                        this.role = Role.Button
-                                        this.contentDescription = "Registrar rápidamente como $name."
-                                    }
-                            ) {
-                                Text(
-                                    text = name,
-                                    color = Color.White,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 13.5.sp,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
-                                )
-                            }
-                        }
-                    }
                 }
             } else {
                 // FASE 2: CREACIÓN DE CLAVE POR TOQUES LATERALES (3 TOQUES)

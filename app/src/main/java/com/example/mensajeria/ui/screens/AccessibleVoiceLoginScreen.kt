@@ -199,50 +199,6 @@ fun AccessibleVoiceLoginScreen(
                         onClick = { startListeningForName() },
                         leadingIcon = Icons.Default.Mic
                     )
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // Acceso táctil rápido por si hay mucho ruido en el entorno
-                    Text(
-                        text = "O toca tu cuenta directamente:",
-                        color = TextSecondaryGray,
-                        fontSize = 14.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        authViewModel.authRepository.predefinedUsers.take(2).forEach { user ->
-                            Card(
-                                shape = RoundedCornerShape(14.dp),
-                                colors = CardDefaults.cardColors(containerColor = DarkCardBackground),
-                                border = BorderStroke(1.dp, AccessibleYellow),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 6.dp)
-                                    .clickable {
-                                        detectedUser = user
-                                        authViewModel.ttsService.speak(
-                                            "Cuenta seleccionada: ${user.name}. Ingresa tu contraseña de tres toques tocando los lados de la pantalla."
-                                        )
-                                    }
-                            ) {
-                                Text(
-                                    text = user.name,
-                                    color = Color.White,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(12.dp)
-                                )
-                            }
-                        }
-                    }
                 }
             } else {
                 // FASE 2: CONTRASEÑA POR TOQUES LATERALES (IZQUIERDA / DERECHA)
