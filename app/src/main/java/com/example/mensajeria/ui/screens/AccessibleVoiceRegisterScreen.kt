@@ -101,7 +101,7 @@ fun AccessibleVoiceRegisterScreen(
                 "Permiso concedido. Di tu nombre completo en voz alta.",
                 onDone = {
                     coroutineScope.launch {
-                        delay(350)
+                        delay(450)
                         authViewModel.startRegistrationVoiceInput(
                             onResult = { recognizedName ->
                                 isListening = false
@@ -146,7 +146,7 @@ fun AccessibleVoiceRegisterScreen(
             onDone = {
                 // Pausa de 350ms para que el hardware de audio termine de liberar el altavoz
                 coroutineScope.launch {
-                    delay(350)
+                    delay(450)
                     authViewModel.startRegistrationVoiceInput(
                         onResult = { recognizedName ->
                             isListening = false

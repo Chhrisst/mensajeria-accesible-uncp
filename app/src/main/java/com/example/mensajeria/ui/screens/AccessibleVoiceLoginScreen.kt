@@ -100,7 +100,7 @@ fun AccessibleVoiceLoginScreen(
                 "Permiso concedido. Di tu nombre de usuario en voz alta.",
                 onDone = {
                     coroutineScope.launch {
-                        delay(350)
+                        delay(450)
                         authViewModel.startVoiceAuth()
                     }
                 }
@@ -126,7 +126,7 @@ fun AccessibleVoiceLoginScreen(
             "Para iniciar sesión, por favor di tu nombre de usuario en voz alta.",
             onDone = {
                 coroutineScope.launch {
-                    delay(350)
+                    delay(450)
                     authViewModel.startVoiceAuth()
                 }
             }

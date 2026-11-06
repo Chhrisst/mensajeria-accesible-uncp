@@ -12,30 +12,41 @@ import android.util.Log
 
 /**
  * Servicio encapsulado de Reconocimiento de Voz (STT) adaptado para interacciones accesibles.
- * Emite sonido de tono prompt y vibración en el momento exacto en que el micrófono se abre y está listo.
+ * Ejecuta de forma segura en el hilo principal y evita carreras asíncronas de destrucción.
  */
 class SpeechService(private val context: Context) {
 
     private var speechRecognizer: SpeechRecognizer? = null
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val soundService = SoundNotificationService.getInstance(context)
     private val vibrationService = VibrationService.getInstance(context)
 
     fun isAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
+
+    private fun destroyCurrentRecognizer() {
+        try {
+            speechRecognizer?.setRecognitionListener(null)
+            speechRecognizer?.stopListening()
+            speechRecognizer?.destroy()
+        } catch (e: Exception) {
+            Log.w("SpeechService", "Aviso al detener reconocedor previo: ${e.message}")
+        }
+        speechRecognizer = null
+    }
 
     fun startListening(
         onReady: () -> Unit = {},
         onResult: (String) -> Unit,
         onError: (String) -> Unit
     ) {
-        mainHandler.post {
+        val executionBlock = Runnable {
             if (!isAvailable()) {
-                Log.w("SpeechService", "SpeechRecognizer no está disponible en este dispositivo.")
+                Log.e("SpeechService", "SpeechRecognizer no está disponible en este dispositivo.")
                 onError("El reconocimiento de voz no está disponible en este dispositivo.")
-                return@post
+                return@Runnable
             }
 
-            stopListening()
+            // Destrucción inmediata y síncrona de cualquier sesión previa
+            destroyCurrentRecognizer()
 
             try {
                 speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
@@ -47,33 +58,31 @@ class SpeechService(private val context: Context) {
                     putExtra(RecognizerIntent.EXTRA_PROMPT, "Dicte su nombre o mensaje claramente")
                     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 3000L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 4000L)
                     putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L)
                     putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L)
                 }
 
                 speechRecognizer?.setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
-                        Log.d("SpeechService", "Micrófono activado y listo para capturar voz.")
+                        Log.i("SpeechService", "onReadyForSpeech: Micrófono abierto y escuchando activamente.")
                         vibrationService.vibrateStartListening()
-                        mainHandler.post { onReady() }
+                        onReady()
                     }
 
                     override fun onResults(results: Bundle?) {
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         val recognized = matches?.firstOrNull()?.trim()
-                        Log.d("SpeechService", "Resultado reconocido: $recognized")
-                        mainHandler.post {
-                            if (!recognized.isNullOrEmpty()) {
-                                onResult(recognized)
-                            } else {
-                                onError("No se detectó el texto dictado.")
-                            }
+                        Log.i("SpeechService", "onResults detectado: $recognized")
+                        if (!recognized.isNullOrEmpty()) {
+                            onResult(recognized)
+                        } else {
+                            onError("No se detectó el texto dictado.")
                         }
                     }
 
                     override fun onError(error: Int) {
-                        Log.w("SpeechService", "Error de reconocimiento de voz código: $error")
+                        Log.e("SpeechService", "onError recibido código: $error")
                         val errorMsg = when (error) {
                             SpeechRecognizer.ERROR_AUDIO -> "Error al capturar audio del micrófono."
                             SpeechRecognizer.ERROR_NO_MATCH -> "No se detectó ninguna palabra hablada."
@@ -82,17 +91,17 @@ class SpeechService(private val context: Context) {
                             SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Error de conexión de red para reconocimiento."
                             else -> "No se pudo completar el reconocimiento. Código: $error"
                         }
-                        mainHandler.post { onError(errorMsg) }
+                        onError(errorMsg)
                     }
 
                     override fun onBeginningOfSpeech() {
-                        Log.d("SpeechService", "El usuario comenzó a hablar.")
+                        Log.i("SpeechService", "onBeginningOfSpeech: El usuario comenzó a hablar.")
                     }
 
                     override fun onRmsChanged(rmsdB: Float) {}
                     override fun onBufferReceived(buffer: ByteArray?) {}
                     override fun onEndOfSpeech() {
-                        Log.d("SpeechService", "Fin de captura de voz.")
+                        Log.i("SpeechService", "onEndOfSpeech: El usuario terminó de hablar.")
                     }
 
                     override fun onPartialResults(partialResults: Bundle?) {}
@@ -105,15 +114,19 @@ class SpeechService(private val context: Context) {
                 onError("Error al inicializar micrófono: ${e.localizedMessage}")
             }
         }
+
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            executionBlock.run()
+        } else {
+            mainHandler.post(executionBlock)
+        }
     }
 
     fun stopListening() {
-        mainHandler.post {
-            try {
-                speechRecognizer?.stopListening()
-                speechRecognizer?.destroy()
-            } catch (_: Exception) {}
-            speechRecognizer = null
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            destroyCurrentRecognizer()
+        } else {
+            mainHandler.post { destroyCurrentRecognizer() }
         }
     }
 
