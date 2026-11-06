@@ -6,7 +6,7 @@
 ![Min SDK](https://img.shields.io/badge/Min%20SDK-24%20(Android%207.0)-informational?style=for-the-badge)
 ![Target SDK](https://img.shields.io/badge/Target%20SDK-36-success?style=for-the-badge)
 ![Institution](https://img.shields.io/badge/Universidad-UPN-orange?style=for-the-badge)
-![Beneficiary](https://img.shields.io/badge/Organizaci%C3%B3n-UNCP-blue?style=for-the-badge)
+![Project](https://img.shields.io/badge/Proyecto-Universitario-blue?style=for-the-badge)
 
 Repositorio oficial del código fuente del aplicativo móvil desarrollado para el proyecto de tesis:
 > **«Implementación de un aplicativo móvil de mensajería asistido por inteligencia artificial para mejorar la autonomía comunicativa de personas con discapacidad visual severa en la Unión Nacional de Ciegos del Perú, Lima, 2026»**
@@ -106,18 +106,10 @@ com.example.mensajeria/
 
 ---
 
-## 👥 Equipo de Investigación y Créditos
+## 👥 Créditos y Autores
 
-**Universidad Privada del Norte (UPN)**  
-Facultad de Ingeniería – Carrera de Ingeniería de Sistemas Computacionales  
-Lima, Perú – 2026
+Proyecto universitario desarrollado por estudiantes de la carrera de Ingeniería de Sistemas Computacionales – **Universidad Privada del Norte (UPN)**:
 
-* **Christian Oneill Beteta Jiménez** — Código: N00321812
-* **Romell Jhon Rivera Montero** — Código: N00408112
-* **Miguel Ángel David Retuerto Anaya** — Código: N00206693
-
-**Asesor de Tesis:**  
-* **Mg. Fernando Alex Sierra Liñan**
-
-**Institución Beneficiaria y de Validación:**  
-* **Unión Nacional de Ciegos del Perú (UNCP)** — Sede Central Breña, Lima.
+* Christian Beteta Jiménez
+* Romell Rivera Montero
+* Miguel Retuerto Anaya
