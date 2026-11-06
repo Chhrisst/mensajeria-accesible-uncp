@@ -8,7 +8,7 @@
 ![Institution](https://img.shields.io/badge/Universidad-UPN-orange?style=for-the-badge)
 ![Project](https://img.shields.io/badge/Proyecto-Universitario-blue?style=for-the-badge)
 
-Repositorio oficial del código fuente del aplicativo móvil desarrollado para el proyecto de tesis:
+Repositorio oficial del código fuente del aplicativo móvil desarrollado como proyecto de investigación universitaria:
 > **«Implementación de un aplicativo móvil de mensajería asistido por inteligencia artificial para mejorar la autonomía comunicativa de personas con discapacidad visual severa en la Unión Nacional de Ciegos del Perú, Lima, 2026»**
 
 ---
@@ -106,10 +106,6 @@ com.example.mensajeria/
 
 ---
 
-## 👥 Créditos y Autores
+## 🎓 Contexto del Proyecto
 
-Proyecto universitario desarrollado por estudiantes de la carrera de Ingeniería de Sistemas Computacionales – **Universidad Privada del Norte (UPN)**:
-
-* Christian Beteta Jiménez
-* Romell Rivera Montero
-* Miguel Retuerto Anaya
+Proyecto desarrollado con fines académicos y de investigación en la carrera de **Ingeniería de Sistemas Computacionales** de la **Universidad Privada del Norte (UPN)**, Lima, Perú.
