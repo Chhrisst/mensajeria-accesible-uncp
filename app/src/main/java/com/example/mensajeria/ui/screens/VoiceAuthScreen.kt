@@ -90,7 +90,7 @@ fun VoiceAuthScreen(
                     onDigitClick = { authViewModel.addPinDigit(it) },
                     onRepeatClick = { authViewModel.clearPin() },
                     onHelpClick = {
-                        authViewModel.speakText("Ingrese su PIN de tres dígitos diciendo los números o tocando los botones en pantalla.")
+                        authViewModel.speakText("Ingrese su PIN de cuatro dígitos diciendo los números o tocando los botones en pantalla.")
                     }
                 )
             }
@@ -259,7 +259,7 @@ fun VoicePinScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Ingrese su PIN de 3 dígitos",
+                text = "Ingrese su PIN de 4 dígitos",
                 color = AccessibleYellow,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
@@ -267,7 +267,7 @@ fun VoicePinScreen(
 
             Spacer(modifier = Modifier.height(48.dp))
 
-            PinDotIndicator(enteredLength = enteredPin.length, maxDigits = 3)
+            PinDotIndicator(enteredLength = enteredPin.length, maxDigits = 4)
 
             Spacer(modifier = Modifier.height(24.dp))
 

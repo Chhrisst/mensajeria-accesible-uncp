@@ -59,8 +59,8 @@ data class UserProfile(
     val phone: String = "",
     val dni: String = "",
     val birthDate: String = "",
-    val code: String = "123", // PIN numérico
-    val sidePattern: String = "LRL", // Patrón de toques laterales: L (Izquierda), R (Derecha)
+    val code: String = "1234", // PIN numérico (4 dígitos)
+    val sidePattern: String = "LRLR", // Patrón de toques laterales: L (Izquierda), R (Derecha) (4 toques)
     val role: String = "Socio Activo UNCP",
     val description: String = "",
     val hasDisability: Boolean = true,
@@ -100,7 +100,7 @@ data class RegistrationForm(
     val email: String = "",
     val hasDisability: Boolean = true,
     val visualCondition: String = "Ceguera total",
-    val pin: String = "123"
+    val pin: String = "1234"
 )
 
 /**

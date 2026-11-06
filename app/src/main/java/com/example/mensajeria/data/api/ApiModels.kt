@@ -13,8 +13,8 @@ data class ApiRegisterRequest(
     @SerializedName("phone") val phone: String? = null,
     @SerializedName("dni") val dni: String? = null,
     @SerializedName("birth_date") val birthDate: String? = null,
-    @SerializedName("pin") val pin: String = "123",
-    @SerializedName("side_pattern") val sidePattern: String = "LRL",
+    @SerializedName("pin") val pin: String = "1234",
+    @SerializedName("side_pattern") val sidePattern: String = "LRLR",
     @SerializedName("has_disability") val hasDisability: Boolean = true,
     @SerializedName("visual_condition") val visualCondition: String = "Baja visión"
 )
@@ -25,8 +25,8 @@ data class ApiUserResponse(
     @SerializedName("email") val email: String,
     @SerializedName("phone") val phone: String? = null,
     @SerializedName("dni") val dni: String? = null,
-    @SerializedName("code") val code: String = "123",
-    @SerializedName("side_pattern") val sidePattern: String = "LRL",
+    @SerializedName("code") val code: String = "1234",
+    @SerializedName("side_pattern") val sidePattern: String = "LRLR",
     @SerializedName("role") val role: String = "Socio UNCP",
     @SerializedName("description") val description: String? = null,
     @SerializedName("has_disability") val hasDisability: Boolean = true,

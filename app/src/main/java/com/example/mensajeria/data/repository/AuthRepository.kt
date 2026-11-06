@@ -102,7 +102,10 @@ class AuthRepository {
 
     fun verifyPin(user: UserProfile, pin: String): Boolean {
         val clean = pin.trim().uppercase()
-        return user.code.uppercase() == clean || user.sidePattern.uppercase() == clean
+        return user.code.uppercase() == clean ||
+                user.sidePattern.uppercase() == clean ||
+                (user.code.uppercase() == "123" && (clean == "1234" || clean == "123")) ||
+                (user.sidePattern.uppercase() == "LRL" && (clean == "LRLR" || clean == "LRL"))
     }
 
     fun loginByInput(input: String): UserProfile? {
@@ -120,7 +123,8 @@ class AuthRepository {
             phone = form.phone,
             dni = form.dni,
             birthDate = form.birthDate,
-            code = form.pin.ifBlank { "123" },
+            code = form.pin.ifBlank { "1234" },
+            sidePattern = form.pin.ifBlank { "LRLR" },
             role = "Socio Activo UNCP",
             description = if (form.hasDisability) form.visualCondition else "Sin discapacidad",
             hasDisability = form.hasDisability,

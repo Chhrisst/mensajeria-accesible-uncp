@@ -150,7 +150,7 @@ fun AccessibleVoiceLoginScreen(
             isListeningName = false
             feedbackText = "Cuenta detectada: ${detectedUser?.name}."
             authViewModel.ttsService.speak(
-                "Cuenta detectada: ${detectedUser?.name}. Ahora ingresa tu contraseña de tres toques tocando los lados de la pantalla, o dicta tu PIN por voz."
+                "Cuenta detectada: ${detectedUser?.name}. Ahora ingresa tu clave secreta de cuatro toques tocando los lados de la pantalla de forma discreta."
             )
         }
     }
@@ -158,23 +158,24 @@ fun AccessibleVoiceLoginScreen(
     fun handleSideTap(side: Char) {
         if (detectedUser == null) return
 
+        // Retroalimentación háptica exclusiva y diferenciada por lado:
+        // Izquierda: 1 pulso (35ms)
+        // Derecha: 2 pulsos (doble vibración)
         if (side == 'L') {
-            authViewModel.soundService.playLeftTapSound()
             authViewModel.vibrationService.vibrateLeftTap()
-            authViewModel.ttsService.speak("Izquierda")
         } else {
-            authViewModel.soundService.playRightTapSound()
             authViewModel.vibrationService.vibrateRightTap()
-            authViewModel.ttsService.speak("Derecha")
         }
+        // Seguridad y discreción:
+        // NO se vocaliza "Izquierda" ni "Derecha" por TTS.
+        // NO se emiten tonos audibles que delaten los lados pulsados.
 
         val newPattern = sidePatternEntered + side
         sidePatternEntered = newPattern
 
-        if (newPattern.length == 3) {
+        if (newPattern.length == 4) {
             // Validar patrón contra el usuario
-            val isValid = authViewModel.authRepository.verifyPin(detectedUser!!, newPattern) ||
-                    authViewModel.authRepository.verifyPin(detectedUser!!, "123") // Soporte PIN y patrón
+            val isValid = authViewModel.authRepository.verifyPin(detectedUser!!, newPattern)
             if (isValid) {
                 authViewModel.soundService.playSuccessSound()
                 authViewModel.vibrationService.vibrateSuccess()
@@ -183,7 +184,7 @@ fun AccessibleVoiceLoginScreen(
                 onLoginSuccess(detectedUser!!)
             } else {
                 authViewModel.vibrationService.vibrateError()
-                authViewModel.ttsService.speak("Contraseña incorrecta. Intenta nuevamente tocando los lados.")
+                authViewModel.ttsService.speak("Contraseña incorrecta. Intenta nuevamente tocando los cuatro toques.")
                 sidePatternEntered = ""
             }
         }
@@ -297,19 +298,28 @@ fun AccessibleVoiceLoginScreen(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "Ingresa tu clave de 3 toques",
+                        text = "Ingresa tu clave de 4 toques",
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
                         color = AccessibleYellow,
                         textAlign = TextAlign.Center
                     )
 
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "Pulsaciones ocultas por seguridad (solo vibración)",
+                        fontSize = 12.sp,
+                        color = Color(0xFF8E8E93),
+                        textAlign = TextAlign.Center
+                    )
+
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Indicador de 3 puntos interactivos
+                    // Indicador de 4 puntos interactivos protegidos
                     PinDotIndicator(
                         enteredLength = sidePatternEntered.length,
-                        maxDigits = 3
+                        maxDigits = 4
                     )
 
                     Spacer(modifier = Modifier.height(20.dp))
@@ -407,7 +417,7 @@ fun AccessibleVoiceLoginScreen(
                             onClick = {
                                 sidePatternEntered = ""
                                 authViewModel.soundService.playButtonClickSound()
-                                authViewModel.ttsService.speak("Clave reiniciada. Vuelve a ingresar tus tres toques.")
+                                authViewModel.ttsService.speak("Clave reiniciada. Vuelve a ingresar tus cuatro toques.")
                             },
                             modifier = Modifier.weight(1f)
                         )

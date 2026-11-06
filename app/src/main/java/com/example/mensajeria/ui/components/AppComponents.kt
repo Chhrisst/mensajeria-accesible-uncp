@@ -558,12 +558,12 @@ fun RegistrationStepper(
 }
 
 /**
- * Indicador de puntos grandes del PIN de 3 dígitos.
+ * Indicador de puntos grandes del PIN de 4 toques/dígitos (discreto y seguro).
  */
 @Composable
 fun PinDotIndicator(
     enteredLength: Int,
-    maxDigits: Int = 3,
+    maxDigits: Int = 4,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -575,8 +575,8 @@ fun PinDotIndicator(
             val isFilled = i <= enteredLength
             Box(
                 modifier = Modifier
-                    .padding(horizontal = 14.dp)
-                    .size(32.dp)
+                    .padding(horizontal = 10.dp)
+                    .size(28.dp)
                     .clip(CircleShape)
                     .background(if (isFilled) AccessibleYellow else Color(0xFF2C2C2E))
                     .border(2.dp, AccessibleYellow, CircleShape)

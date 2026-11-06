@@ -108,7 +108,7 @@ fun AccessibleVoiceRegisterScreen(
                                 registeredName = recognizedName
                                 feedbackText = "Nombre recibido: $recognizedName"
                                 authViewModel.ttsService.speak(
-                                    "Nombre recibido: $recognizedName. Ahora crea tu contraseña de tres toques: toca el lado izquierdo o derecho tres veces."
+                                    "Nombre recibido: $recognizedName. Ahora crea tu clave secreta de cuatro toques: toca el lado izquierdo o derecho cuatro veces de manera discreta."
                                 )
                             },
                             onError = { error ->
@@ -153,7 +153,7 @@ fun AccessibleVoiceRegisterScreen(
                             registeredName = recognizedName
                             feedbackText = "Nombre recibido: $recognizedName"
                             authViewModel.ttsService.speak(
-                                "Nombre recibido: $recognizedName. Ahora crea tu contraseña de tres toques: toca el lado izquierdo o derecho tres veces."
+                                "Nombre recibido: $recognizedName. Ahora crea tu clave secreta de cuatro toques: toca el lado izquierdo o derecho cuatro veces de manera discreta."
                             )
                         },
                         onError = { error ->
@@ -181,20 +181,21 @@ fun AccessibleVoiceRegisterScreen(
     fun handleSideTap(side: Char) {
         if (registeredName.isBlank()) return
 
+        // Retroalimentación háptica exclusiva y diferenciada por lado:
+        // Izquierda: 1 pulso (35ms)
+        // Derecha: 2 pulsos (doble vibración)
         if (side == 'L') {
-            authViewModel.soundService.playLeftTapSound()
             authViewModel.vibrationService.vibrateLeftTap()
-            authViewModel.ttsService.speak("Izquierda")
         } else {
-            authViewModel.soundService.playRightTapSound()
             authViewModel.vibrationService.vibrateRightTap()
-            authViewModel.ttsService.speak("Derecha")
         }
+        // Discreción total: NO se vocaliza "Izquierda" ni "Derecha" por TTS,
+        // ni se reproducen tonos audibles, asegurando que nadie cerca descubra la contraseña.
 
         val newPattern = sidePatternEntered + side
         sidePatternEntered = newPattern
 
-        if (newPattern.length == 3) {
+        if (newPattern.length == 4) {
             authViewModel.soundService.playSuccessSound()
             authViewModel.vibrationService.vibrateSuccess()
             val newUser = authViewModel.authRepository.registerUser(
@@ -320,9 +321,18 @@ fun AccessibleVoiceRegisterScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Crea tu clave tocando 3 veces los lados",
+                        text = "Crea tu clave tocando 4 veces los lados",
                         fontSize = 15.sp,
                         color = TextSecondaryGray,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "Pulsaciones ocultas por seguridad (solo vibración)",
+                        fontSize = 12.sp,
+                        color = Color(0xFF8E8E93),
                         textAlign = TextAlign.Center
                     )
 
@@ -330,7 +340,7 @@ fun AccessibleVoiceRegisterScreen(
 
                     PinDotIndicator(
                         enteredLength = sidePatternEntered.length,
-                        maxDigits = 3
+                        maxDigits = 4
                     )
 
                     Spacer(modifier = Modifier.height(20.dp))
@@ -423,7 +433,7 @@ fun AccessibleVoiceRegisterScreen(
                         onClick = {
                             sidePatternEntered = ""
                             authViewModel.soundService.playButtonClickSound()
-                            authViewModel.ttsService.speak("Clave reiniciada. Ingresa tres toques nuevamente.")
+                            authViewModel.ttsService.speak("Clave reiniciada. Ingresa cuatro toques nuevamente.")
                         },
                         modifier = Modifier.fillMaxWidth()
                     )

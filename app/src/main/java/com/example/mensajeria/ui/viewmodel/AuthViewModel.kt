@@ -122,7 +122,7 @@ class AuthViewModel(
                     feedbackMessage = "Cuenta detectada: ${found.name}. Escuchando PIN..."
                 )
             }
-            ttsService.speak("Cuenta detectada: ${found.name}. Escuchando PIN de tres dígitos.", onDone = {
+            ttsService.speak("Cuenta detectada: ${found.name}. Escuchando PIN de cuatro dígitos.", onDone = {
                 // Iniciar escucha del PIN
                 startListeningForPin(found)
             })
@@ -132,15 +132,15 @@ class AuthViewModel(
     }
 
     /**
-     * Paso 3: Ingreso y Confirmación Segura del PIN (Canvas.png)
-     * Muestra los 3 puntos amarillos interactivos (● ● ●)
+     * Paso 3: Ingreso y Confirmación Segura del PIN
+     * Muestra los 4 puntos amarillos interactivos (● ● ● ●) de forma discreta
      */
     fun startListeningForPin(user: UserProfile) {
         _voiceAuthState.update {
             it.copy(
                 phase = VoiceAuthPhase.LISTENING_PIN,
                 enteredPin = "",
-                feedbackMessage = "Escuchando PIN de 3 dígitos..."
+                feedbackMessage = "Escuchando PIN de 4 dígitos..."
             )
         }
 
@@ -151,7 +151,7 @@ class AuthViewModel(
             },
             onError = {
                 // Si hubo tiempo de espera, permitir ingresar por toques o reintentar
-                ttsService.speak("No se escuchó el PIN. Puede tocar la pantalla para ingresar los dígitos o pulsar Ayuda.")
+                ttsService.speak("No se escuchó el PIN. Puede tocar la pantalla para ingresar los dígitos de forma discreta o pulsar Ayuda.")
             }
         )
     }
@@ -159,13 +159,13 @@ class AuthViewModel(
     private fun processPinInput(user: UserProfile, pinText: String) {
         // Extraer dígitos o palabras numéricas
         val digits = extractDigitsFromSpeech(pinText)
-        if (digits.length >= 3) {
-            val pinToVerify = digits.take(3)
+        if (digits.length >= 4) {
+            val pinToVerify = digits.take(4)
             _voiceAuthState.update { it.copy(enteredPin = pinToVerify) }
             validatePin(user, pinToVerify)
         } else if (digits.isNotEmpty()) {
             _voiceAuthState.update { it.copy(enteredPin = digits) }
-            ttsService.speak("Ingresado: $digits. Faltan ${3 - digits.length} dígitos.")
+            ttsService.speak("Dígitos recibidos. Faltan ${4 - digits.length} dígitos.")
         } else {
             triggerVoiceError("No se reconocieron dígitos válidos para el PIN.")
         }
@@ -173,13 +173,12 @@ class AuthViewModel(
 
     fun addPinDigit(digit: Char) {
         val currentPin = _voiceAuthState.value.enteredPin
-        if (currentPin.length < 3) {
+        if (currentPin.length < 4) {
             val newPin = currentPin + digit
-            vibrationService.vibrateStartListening()
+            vibrationService.vibrateClick()
             _voiceAuthState.update { it.copy(enteredPin = newPin) }
-            ttsService.speak("Dígito ingresado.")
 
-            if (newPin.length == 3) {
+            if (newPin.length == 4) {
                 val user = _voiceAuthState.value.detectedUser ?: authRepository.predefinedUsers.first()
                 validatePin(user, newPin)
             }
@@ -188,7 +187,7 @@ class AuthViewModel(
 
     fun clearPin() {
         _voiceAuthState.update { it.copy(enteredPin = "") }
-        ttsService.speak("PIN reiniciado. Ingrese los 3 dígitos.")
+        ttsService.speak("PIN reiniciado. Ingrese los 4 dígitos.")
     }
 
     private fun validatePin(user: UserProfile, pin: String) {
