@@ -47,7 +47,7 @@ import com.example.mensajeria.ui.theme.TextSecondaryGray
 
 /**
  * Pantalla 1: Selección inicial de modo de accesibilidad.
- * Pregunta cómo desea usar la app con dos opciones ergonómicas y bien proporcionadas.
+ * Perfectamente ajustada y dimensionada para cualquier tamaño de pantalla y barra de navegación Android.
  */
 @Composable
 fun AccessibilityModeSelectionScreen(
@@ -64,13 +64,13 @@ fun AccessibilityModeSelectionScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(PureBlack)
-            .padding(14.dp)
+            .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Text(
                 text = "¿Cómo deseas usar la app?",
@@ -81,23 +81,23 @@ fun AccessibilityModeSelectionScreen(
                 modifier = Modifier.semantics { heading() }
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
                 text = "Selecciona la opción adaptada a tus necesidades.",
-                fontSize = 14.sp,
+                fontSize = 13.5.sp,
                 color = TextSecondaryGray,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Pantalla dividida en dos paneles interactivos grandes
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 // Opción 1: LADO IZQUIERDO -> Modo Accesible (Discapacidad visual)
                 Card(
@@ -116,33 +116,33 @@ fun AccessibilityModeSelectionScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = 8.dp, vertical = 14.dp),
+                            .padding(horizontal = 8.dp, vertical = 12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            // Insignia / Pill Lado Izquierdo
+                            // Insignia Lado Izquierdo
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
                                     .background(AccessibleYellow.copy(alpha = 0.2f))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
                             ) {
                                 Text(
                                     text = "LADO IZQUIERDO",
-                                    fontSize = 10.sp,
+                                    fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = AccessibleYellow,
                                     textAlign = TextAlign.Center
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
 
-                            // Ícono de Asistencia por Voz
+                            // Ícono de Asistencia de Voz
                             Box(
                                 modifier = Modifier
-                                    .size(64.dp)
+                                    .size(52.dp)
                                     .clip(CircleShape)
                                     .background(AccessibleYellow),
                                 contentAlignment = Alignment.Center
@@ -151,22 +151,22 @@ fun AccessibilityModeSelectionScreen(
                                     imageVector = Icons.Default.RecordVoiceOver,
                                     contentDescription = null,
                                     tint = PureBlack,
-                                    modifier = Modifier.size(34.dp)
+                                    modifier = Modifier.size(28.dp)
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(14.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
 
                             Text(
                                 text = "Modo\nAccesible",
-                                fontSize = 18.sp,
+                                fontSize = 17.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
                                 textAlign = TextAlign.Center,
-                                lineHeight = 22.sp
+                                lineHeight = 21.sp
                             )
 
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(3.dp))
 
                             Text(
                                 text = "Discapacidad visual",
@@ -177,18 +177,18 @@ fun AccessibilityModeSelectionScreen(
                             )
                         }
 
-                        // Lista de beneficios
+                        // Lista de beneficios (concisa, 1 línea por viñeta)
                         Column(
                             horizontalAlignment = Alignment.Start,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 4.dp)
+                                .padding(horizontal = 4.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "• Narrador de voz activo\n• Navegación por arrastre\n• Selección por lados\n• Dictado de mensajes",
-                                fontSize = 11.5.sp,
+                                text = "• Narrador de voz\n• Navegación táctil\n• Selección lateral\n• Dictado de mensajes",
+                                fontSize = 11.sp,
                                 color = TextSecondaryGray,
-                                lineHeight = 17.sp,
+                                lineHeight = 16.sp,
                                 textAlign = TextAlign.Start
                             )
                         }
@@ -212,33 +212,33 @@ fun AccessibilityModeSelectionScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = 8.dp, vertical = 14.dp),
+                            .padding(horizontal = 8.dp, vertical = 12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            // Insignia / Pill Lado Derecho
+                            // Insignia Lado Derecho
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
                                     .background(Color(0xFF25D366).copy(alpha = 0.2f))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
                             ) {
                                 Text(
                                     text = "LADO DERECHO",
-                                    fontSize = 10.sp,
+                                    fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF25D366),
                                     textAlign = TextAlign.Center
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
 
                             // Ícono de Celular estándar
                             Box(
                                 modifier = Modifier
-                                    .size(64.dp)
+                                    .size(52.dp)
                                     .clip(CircleShape)
                                     .background(Color(0xFF25D366)),
                                 contentAlignment = Alignment.Center
@@ -247,22 +247,22 @@ fun AccessibilityModeSelectionScreen(
                                     imageVector = Icons.Default.PhoneAndroid,
                                     contentDescription = null,
                                     tint = PureBlack,
-                                    modifier = Modifier.size(34.dp)
+                                    modifier = Modifier.size(28.dp)
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(14.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
 
                             Text(
                                 text = "Modo\nEstándar",
-                                fontSize = 18.sp,
+                                fontSize = 17.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
                                 textAlign = TextAlign.Center,
-                                lineHeight = 22.sp
+                                lineHeight = 21.sp
                             )
 
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(3.dp))
 
                             Text(
                                 text = "Sin discapacidad",
@@ -273,18 +273,18 @@ fun AccessibilityModeSelectionScreen(
                             )
                         }
 
-                        // Lista de beneficios
+                        // Lista de beneficios (concisa, 1 línea por viñeta)
                         Column(
                             horizontalAlignment = Alignment.Start,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 4.dp)
+                                .padding(horizontal = 4.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "• Modo tipo WhatsApp\n• Teclado en pantalla\n• Lectura visual\n• Mensajería rápida",
-                                fontSize = 11.5.sp,
+                                text = "• Modo tipo WhatsApp\n• Teclado en pantalla\n• Lectura visual\n• Mensajería directa",
+                                fontSize = 11.sp,
                                 color = TextSecondaryGray,
-                                lineHeight = 17.sp,
+                                lineHeight = 16.sp,
                                 textAlign = TextAlign.Start
                             )
                         }
@@ -292,7 +292,7 @@ fun AccessibilityModeSelectionScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(6.dp))
         }
     }
 }

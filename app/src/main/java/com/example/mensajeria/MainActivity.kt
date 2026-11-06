@@ -30,6 +30,12 @@ import com.example.mensajeria.ui.screens.StandardContactListScreen
 import com.example.mensajeria.ui.screens.StandardLoginScreen
 import com.example.mensajeria.ui.screens.StandardRegisterScreen
 import com.example.mensajeria.ui.screens.WelcomeScreen
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.ui.Modifier
+import com.example.mensajeria.ui.theme.PureBlack
 import com.example.mensajeria.ui.theme.MensajeriaTheme
 import com.example.mensajeria.ui.viewmodel.AuthViewModel
 import com.example.mensajeria.ui.viewmodel.ChatViewModel
@@ -83,16 +89,23 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MensajeriaTheme {
-                MensajeriaApp(
-                    initialHasPermission = hasAudioPermission,
-                    authViewModel = authViewModel,
-                    chatViewModel = chatViewModel,
-                    contacts = chatRepository.contacts.value,
-                    onRequestPermission = { callback ->
-                        onPermissionGrantedCallback = callback
-                        requestAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                    }
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(PureBlack)
+                        .systemBarsPadding()
+                ) {
+                    MensajeriaApp(
+                        initialHasPermission = hasAudioPermission,
+                        authViewModel = authViewModel,
+                        chatViewModel = chatViewModel,
+                        contacts = chatRepository.contacts.value,
+                        onRequestPermission = { callback ->
+                            onPermissionGrantedCallback = callback
+                            requestAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    )
+                }
             }
         }
     }
