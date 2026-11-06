@@ -9,31 +9,55 @@ import android.media.ToneGenerator
 import android.net.Uri
 
 /**
- * Servicio para reproducir sonidos accesibles y tonos agradables de notificación.
+ * Servicio para reproducir sonidos accesibles, tonos agradables de confirmación y prompts de voz.
  */
 class SoundNotificationService(private val context: Context) {
 
+    companion object {
+        @Volatile
+        private var instance: SoundNotificationService? = null
+
+        fun getInstance(context: Context): SoundNotificationService {
+            return instance ?: synchronized(this) {
+                instance ?: SoundNotificationService(context.applicationContext).also { instance = it }
+            }
+        }
+    }
+
     private var toneGenerator: ToneGenerator? = try {
-        ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
+        ToneGenerator(AudioManager.STREAM_MUSIC, 85)
     } catch (_: Exception) {
-        null
+        try {
+            ToneGenerator(AudioManager.STREAM_NOTIFICATION, 85)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     /**
-     * Reproduce un sonido agradable cuando se recibe un mensaje nuevo.
+     * Tono de confirmación auditiva instantáneo para cada botón o elemento interactivo pulsado.
      */
-    fun playMessageReceivedSound() {
+    fun playButtonClickSound() {
         try {
-            val notificationUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            val ringtone: Ringtone? = RingtoneManager.getRingtone(context, notificationUri)
-            ringtone?.audioAttributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build()
-            ringtone?.play()
+            toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 55)
         } catch (_: Exception) {
-            // Fallback elegante usando ToneGenerator
-            toneGenerator?.startTone(ToneGenerator.TONE_PROP_PROMPT, 150)
+            try {
+                val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                audioManager?.playSoundEffect(AudioManager.FX_KEY_CLICK)
+            } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * Tono prompt de inicio de escucha por voz (para que el usuario sepa que el micrófono está activo).
+     */
+    fun playListeningPromptSound() {
+        try {
+            toneGenerator?.startTone(ToneGenerator.TONE_PROP_PROMPT, 130)
+        } catch (_: Exception) {
+            try {
+                toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 100)
+            } catch (_: Exception) {}
         }
     }
 
@@ -65,11 +89,19 @@ class SoundNotificationService(private val context: Context) {
     }
 
     /**
-     * Tono para inicio de escucha por voz.
+     * Reproduce un sonido agradable cuando se recibe un mensaje nuevo.
      */
-    fun playListeningPromptSound() {
+    fun playMessageReceivedSound() {
         try {
-            toneGenerator?.startTone(ToneGenerator.TONE_PROP_PROMPT, 100)
-        } catch (_: Exception) {}
+            val notificationUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            val ringtone: Ringtone? = RingtoneManager.getRingtone(context, notificationUri)
+            ringtone?.audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+            ringtone?.play()
+        } catch (_: Exception) {
+            toneGenerator?.startTone(ToneGenerator.TONE_PROP_PROMPT, 150)
+        }
     }
 }

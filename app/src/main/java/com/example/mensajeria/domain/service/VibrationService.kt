@@ -11,12 +11,30 @@ import android.os.VibratorManager
  */
 class VibrationService(context: Context) {
 
+    companion object {
+        @Volatile
+        private var instance: VibrationService? = null
+
+        fun getInstance(context: Context): VibrationService {
+            return instance ?: synchronized(this) {
+                instance ?: VibrationService(context.applicationContext).also { instance = it }
+            }
+        }
+    }
+
     private val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         val manager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
         manager?.defaultVibrator
     } else {
         @Suppress("DEPRECATION")
         context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+    }
+
+    /**
+     * Vibración táctil ultra rápida para confirmación al pulsar cualquier botón.
+     */
+    fun vibrateClick() {
+        vibrate(30)
     }
 
     fun vibrateStartListening() {

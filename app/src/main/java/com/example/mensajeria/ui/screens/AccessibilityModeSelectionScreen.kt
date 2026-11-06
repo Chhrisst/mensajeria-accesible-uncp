@@ -39,6 +39,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import com.example.mensajeria.ui.components.playAccessibleClickFeedback
 import com.example.mensajeria.ui.theme.AccessibleYellow
 import com.example.mensajeria.ui.theme.DarkCardBackground
 import com.example.mensajeria.ui.theme.MensajeriaTheme
@@ -54,6 +56,7 @@ fun AccessibilityModeSelectionScreen(
     onSelectMode: (hasDisability: Boolean) -> Unit,
     onSpeakAnnouncement: (String) -> Unit = {}
 ) {
+    val context = LocalContext.current
     LaunchedEffect(Unit) {
         onSpeakAnnouncement(
             "¿Cómo deseas usar la app? Pulsa el lado izquierdo para Modo Accesible si tienes discapacidad visual. Pulsa el lado derecho para Modo Estándar sin discapacidad."
@@ -104,7 +107,10 @@ fun AccessibilityModeSelectionScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .clickable { onSelectMode(true) }
+                        .clickable {
+                            playAccessibleClickFeedback(context)
+                            onSelectMode(true)
+                        }
                         .semantics {
                             this.role = Role.Button
                             this.contentDescription = "Lado izquierdo: Modo Accesible. Diseñado para personas con discapacidad visual. Activa narrador de voz, dictado y navegación por lados."
@@ -200,7 +206,10 @@ fun AccessibilityModeSelectionScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .clickable { onSelectMode(false) }
+                        .clickable {
+                            playAccessibleClickFeedback(context)
+                            onSelectMode(false)
+                        }
                         .semantics {
                             this.role = Role.Button
                             this.contentDescription = "Lado derecho: Modo Estándar. Para personas sin discapacidad visual. Interfaz convencional con teclado en pantalla."

@@ -1,5 +1,9 @@
 package com.example.mensajeria.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,10 +29,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -38,20 +44,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.example.mensajeria.data.model.RegistrationForm
 import com.example.mensajeria.data.model.UserProfile
 import com.example.mensajeria.ui.components.AccessibleBackButton
 import com.example.mensajeria.ui.components.AccessibleOutlinedButton
 import com.example.mensajeria.ui.components.PinDotIndicator
 import com.example.mensajeria.ui.components.VoiceAssistantLogo
+import com.example.mensajeria.ui.components.playAccessibleClickFeedback
 import com.example.mensajeria.ui.theme.AccessibleYellow
 import com.example.mensajeria.ui.theme.DarkCardBackground
 import com.example.mensajeria.ui.theme.PureBlack
 import com.example.mensajeria.ui.theme.TextSecondaryGray
 import com.example.mensajeria.ui.viewmodel.AuthViewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Pantalla 2.3: Registro accesible guiado totalmente por voz y clave de toques laterales.
+ * Gestiona de forma automática los permisos de micrófono y emite tonos auditivos de confirmación.
  */
 @Composable
 fun AccessibleVoiceRegisterScreen(
@@ -59,12 +70,74 @@ fun AccessibleVoiceRegisterScreen(
     onBack: () -> Unit,
     onRegistrationSuccess: (UserProfile) -> Unit
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
     var registeredName by remember { mutableStateOf("") }
     var sidePatternEntered by remember { mutableStateOf("") }
     var feedbackText by remember { mutableStateOf("Diga su nombre completo en voz alta...") }
     var isListening by remember { mutableStateOf(false) }
 
+    var hasRecordPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasRecordPermission = isGranted
+        if (isGranted) {
+            authViewModel.soundService.playSuccessSound()
+            authViewModel.ttsService.speak(
+                "Permiso de micrófono concedido. Por favor, di tu nombre completo después del tono.",
+                onDone = {
+                    coroutineScope.launch {
+                        delay(350)
+                        isListening = true
+                        authViewModel.startRegistrationVoiceInput(
+                            onResult = { recognizedName ->
+                                isListening = false
+                                registeredName = recognizedName
+                                feedbackText = "Nombre recibido: $recognizedName"
+                                authViewModel.ttsService.speak(
+                                    "Nombre recibido: $recognizedName. Ahora crea tu contraseña de tres toques: toca el lado izquierdo o derecho tres veces."
+                                )
+                            },
+                            onError = { error ->
+                                isListening = false
+                                feedbackText = "No se escuchó claramente. Presiona Reintentar Dictado."
+                                authViewModel.ttsService.speak(
+                                    "No se escuchó claramente. Toca el botón Reintentar Dictado para intentarlo de nuevo."
+                                )
+                            }
+                        )
+                    }
+                }
+            )
+        } else {
+            feedbackText = "Permiso de micrófono no concedido. Pulse Reintentar Dictado para habilitarlo."
+            authViewModel.ttsService.speak(
+                "El permiso de micrófono no fue concedido. Para registrarte por voz, debes permitir el acceso al micrófono."
+            )
+        }
+    }
+
     fun startListeningForName() {
+        if (!hasRecordPermission) {
+            authViewModel.ttsService.speak(
+                "Para registrarte con tu voz, primero debemos habilitar el permiso de micrófono. Por favor acéptalo en el mensaje que aparecerá en pantalla.",
+                onDone = {
+                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            )
+            return
+        }
+
         registeredName = ""
         sidePatternEntered = ""
         feedbackText = "Diga su nombre completo en voz alta..."
@@ -73,23 +146,27 @@ fun AccessibleVoiceRegisterScreen(
         authViewModel.ttsService.speak(
             "Por favor, di tu nombre completo después del tono.",
             onDone = {
-                authViewModel.startRegistrationVoiceInput(
-                    onResult = { recognizedName ->
-                        isListening = false
-                        registeredName = recognizedName
-                        feedbackText = "Nombre recibido: $recognizedName"
-                        authViewModel.ttsService.speak(
-                            "Nombre recibido: $recognizedName. Ahora crea tu contraseña de tres toques: toca el lado izquierdo o derecho tres veces."
-                        )
-                    },
-                    onError = { error ->
-                        isListening = false
-                        feedbackText = "No se escuchó claramente. Presiona Reintentar Dictado."
-                        authViewModel.ttsService.speak(
-                            "No se escuchó claramente. Toca el botón Reintentar Dictado para intentarlo de nuevo."
-                        )
-                    }
-                )
+                // Pausa de 350ms para que el hardware de audio termine de liberar el altavoz
+                coroutineScope.launch {
+                    delay(350)
+                    authViewModel.startRegistrationVoiceInput(
+                        onResult = { recognizedName ->
+                            isListening = false
+                            registeredName = recognizedName
+                            feedbackText = "Nombre recibido: $recognizedName"
+                            authViewModel.ttsService.speak(
+                                "Nombre recibido: $recognizedName. Ahora crea tu contraseña de tres toques: toca el lado izquierdo o derecho tres veces."
+                            )
+                        },
+                        onError = { error ->
+                            isListening = false
+                            feedbackText = "No se escuchó claramente. Presiona Reintentar Dictado."
+                            authViewModel.ttsService.speak(
+                                "No se escuchó claramente. Toca el botón Reintentar Dictado para intentarlo de nuevo."
+                            )
+                        }
+                    )
+                }
             }
         )
     }
@@ -101,13 +178,22 @@ fun AccessibleVoiceRegisterScreen(
     fun handleSideTap(side: Char) {
         if (registeredName.isBlank()) return
 
-        val sideName = if (side == 'L') "Izquierda" else "Derecha"
-        authViewModel.ttsService.speak(sideName)
+        if (side == 'L') {
+            authViewModel.soundService.playLeftTapSound()
+            authViewModel.vibrationService.vibrateLeftTap()
+            authViewModel.ttsService.speak("Izquierda")
+        } else {
+            authViewModel.soundService.playRightTapSound()
+            authViewModel.vibrationService.vibrateRightTap()
+            authViewModel.ttsService.speak("Derecha")
+        }
 
         val newPattern = sidePatternEntered + side
         sidePatternEntered = newPattern
 
         if (newPattern.length == 3) {
+            authViewModel.soundService.playSuccessSound()
+            authViewModel.vibrationService.vibrateSuccess()
             val newUser = authViewModel.authRepository.registerUser(
                 RegistrationForm(
                     fullName = registeredName,
@@ -315,6 +401,7 @@ fun AccessibleVoiceRegisterScreen(
                         text = "Reiniciar clave",
                         onClick = {
                             sidePatternEntered = ""
+                            authViewModel.soundService.playButtonClickSound()
                             authViewModel.ttsService.speak("Clave reiniciada. Ingresa tres toques nuevamente.")
                         },
                         modifier = Modifier.fillMaxWidth()

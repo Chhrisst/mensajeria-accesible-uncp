@@ -120,10 +120,7 @@ fun MensajeriaApp(
     onRequestPermission: (() -> Unit) -> Unit
 ) {
     var currentScreen by remember {
-        mutableStateOf(
-            if (initialHasPermission) AppFlowScreen.INITIAL_WELCOME
-            else AppFlowScreen.PERMISSION_CHECK
-        )
+        mutableStateOf(AppFlowScreen.INITIAL_WELCOME)
     }
 
     var isDisabilityMode by remember { mutableStateOf(true) }

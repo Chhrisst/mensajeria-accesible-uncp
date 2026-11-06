@@ -30,8 +30,9 @@ class AuthViewModel(
     val authRepository: AuthRepository = AuthRepository()
 ) : ViewModel() {
 
-    private val speechService = SpeechService(context)
-    private val vibrationService = VibrationService(context)
+    val speechService = SpeechService(context)
+    val vibrationService = com.example.mensajeria.domain.service.VibrationService.getInstance(context)
+    val soundService = com.example.mensajeria.domain.service.SoundNotificationService.getInstance(context)
     val ttsService = TextToSpeechService(context) {
         // Inicializado correctamente sin disparar audio automático
     }
@@ -69,22 +70,18 @@ class AuthViewModel(
      * "Asistente de Voz Activo - Diga el nombre de su cuenta para iniciar"
      */
     fun startVoiceAuth() {
-        vibrationService.vibrateStartListening()
         ttsService.stop()
-
         _voiceAuthState.value = VoiceAuthState(
             phase = VoiceAuthPhase.LISTENING_NAME,
             feedbackMessage = "Diga el nombre de su cuenta para iniciar"
         )
-        ttsService.speak("Asistente de voz activo. Diga el nombre de su cuenta para iniciar.")
-
         speechService.startListening(
             onReady = {},
             onResult = { recognizedName ->
                 processVoiceAccountName(recognizedName)
             },
             onError = { error ->
-                triggerVoiceError("No se pudo reconocer el comando. Por favor, intente nuevamente.")
+                triggerVoiceError("No se pudo reconocer el nombre. Por favor, intente nuevamente.")
             }
         )
     }
@@ -97,12 +94,10 @@ class AuthViewModel(
         onError: (String) -> Unit
     ) {
         ttsService.stop()
-        vibrationService.vibrateStartListening()
         speechService.startListening(
-            onReady = {
-                vibrationService.vibrateStartListening()
-            },
+            onReady = {},
             onResult = { recognizedText ->
+                soundService.playSuccessSound()
                 vibrationService.vibrateSuccess()
                 onResult(recognizedText)
             },

@@ -60,11 +60,25 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
+import com.example.mensajeria.domain.service.SoundNotificationService
+import com.example.mensajeria.domain.service.VibrationService
 import com.example.mensajeria.ui.theme.AccessibleYellow
 import com.example.mensajeria.ui.theme.DarkCardBackground
 import com.example.mensajeria.ui.theme.PureBlack
 import com.example.mensajeria.ui.theme.TextPlaceholderGray
 import com.example.mensajeria.ui.theme.TextSecondaryGray
+
+/**
+ * Emite sonido de confirmación auditivo y vibración háptica instantánea en cada interacción con botones.
+ */
+fun playAccessibleClickFeedback(context: Context) {
+    try {
+        SoundNotificationService.getInstance(context).playButtonClickSound()
+        VibrationService.getInstance(context).vibrateClick()
+    } catch (_: Exception) {}
+}
 
 /**
  * Logo interactivo del Asistente de Voz:
@@ -77,6 +91,7 @@ fun VoiceAssistantLogo(
     isPulsing: Boolean = true,
     onClick: (() -> Unit)? = null
 ) {
+    val context = LocalContext.current
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val scale by if (isPulsing) {
         infiniteTransition.animateFloat(
@@ -99,7 +114,10 @@ fun VoiceAssistantLogo(
             .then(
                 if (onClick != null) {
                     Modifier
-                        .clickable(onClick = onClick)
+                        .clickable {
+                            playAccessibleClickFeedback(context)
+                            onClick()
+                        }
                         .semantics {
                             this.role = Role.Button
                             this.contentDescription = "Asistente de voz. Presione para activar."
@@ -158,12 +176,16 @@ fun AccessibleBackButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     Box(
         modifier = modifier
             .size(48.dp)
             .clip(CircleShape)
             .background(Color(0xFF1C1C1E))
-            .clickable(onClick = onClick)
+            .clickable {
+                playAccessibleClickFeedback(context)
+                onClick()
+            }
             .semantics {
                 this.role = Role.Button
                 this.contentDescription = "Volver a la pantalla anterior"
@@ -254,8 +276,12 @@ fun AccessiblePrimaryButton(
     enabled: Boolean = true,
     leadingIcon: ImageVector? = null
 ) {
+    val context = LocalContext.current
     Button(
-        onClick = onClick,
+        onClick = {
+            playAccessibleClickFeedback(context)
+            onClick()
+        },
         enabled = enabled,
         colors = ButtonDefaults.buttonColors(
             containerColor = AccessibleYellow,
@@ -301,8 +327,12 @@ fun AccessibleOutlinedButton(
     modifier: Modifier = Modifier,
     leadingIcon: ImageVector? = null
 ) {
+    val context = LocalContext.current
     Button(
-        onClick = onClick,
+        onClick = {
+            playAccessibleClickFeedback(context)
+            onClick()
+        },
         colors = ButtonDefaults.buttonColors(
             containerColor = Color.Transparent,
             contentColor = AccessibleYellow
@@ -349,6 +379,7 @@ fun AccessibleOptionCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val cardBg = if (isSelected && showRadio) AccessibleYellow else DarkCardBackground
     val textColor = if (isSelected && showRadio) PureBlack else Color.White
     val subtextColor = if (isSelected && showRadio) Color(0xFF262626) else TextSecondaryGray
@@ -361,7 +392,10 @@ fun AccessibleOptionCard(
         modifier = modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = 72.dp)
-            .clickable(onClick = onClick)
+            .clickable {
+                playAccessibleClickFeedback(context)
+                onClick()
+            }
             .semantics {
                 this.role = Role.Button
                 this.contentDescription = "$title. ${subtitle ?: ""}. ${if (isSelected) "Seleccionado" else "No seleccionado"}"
