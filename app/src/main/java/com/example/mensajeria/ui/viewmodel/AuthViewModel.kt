@@ -90,6 +90,29 @@ class AuthViewModel(
     }
 
     /**
+     * Dictado directo por voz para registro de nuevo usuario.
+     */
+    fun startRegistrationVoiceInput(
+        onResult: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        ttsService.stop()
+        vibrationService.vibrateStartListening()
+        speechService.startListening(
+            onReady = {
+                vibrationService.vibrateStartListening()
+            },
+            onResult = { recognizedText ->
+                vibrationService.vibrateSuccess()
+                onResult(recognizedText)
+            },
+            onError = { errorMsg ->
+                onError(errorMsg)
+            }
+        )
+    }
+
+    /**
      * Paso 2: Selección de Cuenta por Voz (Modo Seguro)
      * "Cuenta detectada. Escuchando PIN..."
      */

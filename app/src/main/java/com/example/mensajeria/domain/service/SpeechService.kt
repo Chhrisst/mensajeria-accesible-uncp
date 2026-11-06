@@ -1,18 +1,22 @@
-﻿package com.example.mensajeria.domain.service
+package com.example.mensajeria.domain.service
 
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 
 /**
  * Servicio encapsulado de Reconocimiento de Voz (STT) adaptado para interacciones accesibles.
+ * Garantiza ejecución segura en el hilo principal (Main Thread / UI Thread) de Android.
  */
 class SpeechService(private val context: Context) {
 
     private var speechRecognizer: SpeechRecognizer? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     fun isAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
 
@@ -21,62 +25,77 @@ class SpeechService(private val context: Context) {
         onResult: (String) -> Unit,
         onError: (String) -> Unit
     ) {
-        if (!isAvailable()) {
-            onError("El reconocimiento de voz no está disponible en este dispositivo.")
-            return
-        }
-
-        stopListening()
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
-
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-PE")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Dicte su mensaje claramente")
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        }
-
-        speechRecognizer?.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) {
-                onReady()
+        mainHandler.post {
+            if (!isAvailable()) {
+                onError("El reconocimiento de voz no está disponible en este dispositivo.")
+                return@post
             }
 
-            override fun onResults(results: Bundle?) {
-                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                val recognized = matches?.firstOrNull()?.trim()
-                if (!recognized.isNullOrEmpty()) {
-                    onResult(recognized)
-                } else {
-                    onError("No se reconoció ninguna frase. Intente dictar nuevamente.")
+            stopListening()
+
+            try {
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
+
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-PE")
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "es-PE")
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Dicte su nombre claramente")
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
                 }
+
+                speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        mainHandler.post { onReady() }
+                    }
+
+                    override fun onResults(results: Bundle?) {
+                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        val recognized = matches?.firstOrNull()?.trim()
+                        mainHandler.post {
+                            if (!recognized.isNullOrEmpty()) {
+                                onResult(recognized)
+                            } else {
+                                onError("No se reconoció ninguna frase. Intente dictar nuevamente.")
+                            }
+                        }
+                    }
+
+                    override fun onError(error: Int) {
+                        val errorMsg = when (error) {
+                            SpeechRecognizer.ERROR_AUDIO -> "Error de grabación de audio."
+                            SpeechRecognizer.ERROR_NO_MATCH -> "No se detectó ninguna palabra hablada."
+                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Tiempo de espera agotado. No se escuchó voz."
+                            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Falta permiso de micrófono."
+                            SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Error de conexión de red para reconocimiento."
+                            else -> "No se pudo completar el reconocimiento. Código: $error"
+                        }
+                        mainHandler.post { onError(errorMsg) }
+                    }
+
+                    override fun onBeginningOfSpeech() {}
+                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+                    override fun onEndOfSpeech() {}
+                    override fun onPartialResults(partialResults: Bundle?) {}
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+                })
+
+                speechRecognizer?.startListening(intent)
+            } catch (e: Exception) {
+                onError("Error al inicializar micrófono: ${e.localizedMessage}")
             }
-
-            override fun onError(error: Int) {
-                val errorMsg = when (error) {
-                    SpeechRecognizer.ERROR_AUDIO -> "Error de grabación de audio."
-                    SpeechRecognizer.ERROR_NO_MATCH -> "No se detectó ninguna palabra hablada."
-                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Tiempo de espera agotado. No se escuchó voz."
-                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Falta permiso de micrófono."
-                    else -> "No se pudo completar el reconocimiento. Intente nuevamente."
-                }
-                onError(errorMsg)
-            }
-
-            override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {}
-            override fun onPartialResults(partialResults: Bundle?) {}
-            override fun onEvent(eventType: Int, params: Bundle?) {}
-        })
-
-        speechRecognizer?.startListening(intent)
+        }
     }
 
     fun stopListening() {
-        speechRecognizer?.stopListening()
-        speechRecognizer?.destroy()
-        speechRecognizer = null
+        mainHandler.post {
+            try {
+                speechRecognizer?.stopListening()
+                speechRecognizer?.destroy()
+            } catch (_: Exception) {}
+            speechRecognizer = null
+        }
     }
 
     fun destroy() {

@@ -2,13 +2,15 @@ package com.example.mensajeria.domain.service
 
 import android.content.Context
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
 
 /**
  * Servicio encapsulado de Síntesis de Voz (Text-to-Speech) adaptado para personas invidentes.
- * Soporta cola pendiente para anuncios solicitados antes de que el motor de voz termine de inicializarse.
+ * Soporta cola pendiente y garantiza que los callbacks se ejecuten en el hilo principal (Main Thread).
  */
 class TextToSpeechService(
     context: Context,
@@ -19,6 +21,7 @@ class TextToSpeechService(
     private var isReady: Boolean = false
     private var pendingText: String? = null
     private var pendingOnDone: (() -> Unit)? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
@@ -29,7 +32,9 @@ class TextToSpeechService(
             }
             tts?.setSpeechRate(0.95f) // Ritmo ligeramente pausado para máxima inteligibilidad auditiva
             isReady = true
-            onInitSuccess()
+            mainHandler.post {
+                onInitSuccess()
+            }
 
             // Reproducir cualquier anuncio pendiente que se haya solicitado mientras cargaba el motor
             val textToPlay = pendingText
@@ -38,7 +43,9 @@ class TextToSpeechService(
             pendingOnDone = null
 
             if (!textToPlay.isNullOrBlank()) {
-                speak(textToPlay, onDone = callbackToRun ?: {})
+                mainHandler.post {
+                    speak(textToPlay, onDone = callbackToRun ?: {})
+                }
             }
         }
     }
@@ -62,7 +69,9 @@ class TextToSpeechService(
             override fun onStart(id: String?) {}
             override fun onDone(id: String?) {
                 if (id == utteranceId) {
-                    onDone()
+                    mainHandler.post {
+                        onDone()
+                    }
                 }
             }
             override fun onError(id: String?) {}

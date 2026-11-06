@@ -22,7 +22,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,33 +61,41 @@ fun AccessibleVoiceRegisterScreen(
 ) {
     var registeredName by remember { mutableStateOf("") }
     var sidePatternEntered by remember { mutableStateOf("") }
-    var feedbackText by remember { mutableStateOf("Iniciando dictado de nombre...") }
+    var feedbackText by remember { mutableStateOf("Diga su nombre completo en voz alta...") }
+    var isListening by remember { mutableStateOf(false) }
 
     fun startListeningForName() {
         registeredName = ""
         sidePatternEntered = ""
         feedbackText = "Diga su nombre completo en voz alta..."
+        isListening = true
+
         authViewModel.ttsService.speak(
-            "Para registrarte, por favor di tu nombre completo después del tono.",
+            "Por favor, di tu nombre completo después del tono.",
             onDone = {
-                authViewModel.startVoiceAuth()
+                authViewModel.startRegistrationVoiceInput(
+                    onResult = { recognizedName ->
+                        isListening = false
+                        registeredName = recognizedName
+                        feedbackText = "Nombre recibido: $recognizedName"
+                        authViewModel.ttsService.speak(
+                            "Nombre recibido: $recognizedName. Ahora crea tu contraseña de tres toques: toca el lado izquierdo o derecho tres veces."
+                        )
+                    },
+                    onError = { error ->
+                        isListening = false
+                        feedbackText = "No se escuchó claramente. Presiona Reintentar Dictado."
+                        authViewModel.ttsService.speak(
+                            "No se escuchó claramente. Toca el botón Reintentar Dictado para intentarlo de nuevo."
+                        )
+                    }
+                )
             }
         )
     }
 
     LaunchedEffect(Unit) {
         startListeningForName()
-    }
-
-    val voiceAuthState by authViewModel.voiceAuthState.collectAsState()
-    LaunchedEffect(voiceAuthState.detectedUser) {
-        if (voiceAuthState.detectedUser != null && registeredName.isBlank()) {
-            registeredName = voiceAuthState.detectedUser!!.name
-            feedbackText = "Nombre registrado: $registeredName."
-            authViewModel.ttsService.speak(
-                "Nombre recibido: $registeredName. Ahora crea tu contraseña de tres toques: toca el lado izquierdo o derecho tres veces."
-            )
-        }
     }
 
     fun handleSideTap(side: Char) {
@@ -155,7 +162,7 @@ fun AccessibleVoiceRegisterScreen(
                 ) {
                     VoiceAssistantLogo(
                         size = 180.dp,
-                        isPulsing = true,
+                        isPulsing = isListening,
                         onClick = { startListeningForName() }
                     )
 
@@ -183,14 +190,14 @@ fun AccessibleVoiceRegisterScreen(
                     Spacer(modifier = Modifier.height(28.dp))
 
                     AccessibleOutlinedButton(
-                        text = "Reintentar Dictado",
+                        text = if (isListening) "Escuchando tu voz..." else "Reintentar Dictado",
                         onClick = { startListeningForName() },
                         leadingIcon = Icons.Default.Mic
                     )
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Opciones rápidas de prueba
+                    // Opciones rápidas de prueba táctil
                     Text(
                         text = "O registrar como:",
                         color = TextSecondaryGray,
@@ -203,37 +210,38 @@ fun AccessibleVoiceRegisterScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
-                        listOf("Miguel Retuerto", "Juan Perez").forEach { name ->
+                        listOf("Christian Beteta", "Miguel Retuerto", "Juan Perez").forEach { name ->
                             Card(
                                 shape = RoundedCornerShape(14.dp),
                                 colors = CardDefaults.cardColors(containerColor = DarkCardBackground),
-                                border = BorderStroke(1.dp, AccessibleYellow),
+                                border = BorderStroke(1.5.dp, AccessibleYellow),
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 6.dp)
                                     .clickable {
                                         registeredName = name
+                                        feedbackText = "Nombre registrado: $name."
                                         authViewModel.ttsService.speak(
-                                            "Nombre seleccionado: $name. Ahora crea tu contraseña de tres toques tocando los lados de la pantalla."
+                                            "Nombre recibido: $name. Ahora crea tu contraseña de tres toques: toca el lado izquierdo o derecho tres veces."
                                         )
+                                    }
+                                    .semantics {
+                                        this.role = Role.Button
+                                        this.contentDescription = "Registrar rápidamente como $name."
                                     }
                             ) {
                                 Text(
                                     text = name,
                                     color = Color.White,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 13.5.sp,
                                     textAlign = TextAlign.Center,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(12.dp)
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
                                 )
                             }
                         }
                     }
                 }
             } else {
-                // FASE 2: CREACIÓN DE CONTRASEÑA DE 3 TOQUES LATERALES
+                // FASE 2: CREACIÓN DE CLAVE POR TOQUES LATERALES (3 TOQUES)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -241,18 +249,18 @@ fun AccessibleVoiceRegisterScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Nombre: $registeredName",
-                        fontSize = 18.sp,
-                        color = TextSecondaryGray
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Text(
-                        text = "Crea tu clave de 3 toques",
+                        text = "Hola, $registeredName",
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
-                        color = AccessibleYellow,
+                        color = AccessibleYellow
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Crea tu clave tocando 3 veces los lados",
+                        fontSize = 15.sp,
+                        color = TextSecondaryGray,
                         textAlign = TextAlign.Center
                     )
 
