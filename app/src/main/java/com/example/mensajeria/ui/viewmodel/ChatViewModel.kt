@@ -35,9 +35,7 @@ class ChatViewModel(
     var isDisabilityMode: Boolean = true
 
     val ttsService = TextToSpeechService(context) {
-        if (isDisabilityMode) {
-            speakWelcome()
-        }
+        // Inicializado correctamente
     }
 
     private val _uiState = MutableStateFlow(ChatUiState())

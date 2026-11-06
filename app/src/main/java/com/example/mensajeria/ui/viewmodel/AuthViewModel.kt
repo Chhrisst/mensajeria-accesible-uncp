@@ -33,7 +33,7 @@ class AuthViewModel(
     private val speechService = SpeechService(context)
     private val vibrationService = VibrationService(context)
     val ttsService = TextToSpeechService(context) {
-        speakWelcome()
+        // Inicializado correctamente sin disparar audio automático
     }
 
     // Estado de login general
