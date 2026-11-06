@@ -51,7 +51,6 @@ import com.example.mensajeria.ui.components.AccessibleBackButton
 import com.example.mensajeria.ui.components.AccessibleOutlinedButton
 import com.example.mensajeria.ui.components.PinDotIndicator
 import com.example.mensajeria.ui.components.VoiceAssistantLogo
-import com.example.mensajeria.ui.components.playAccessibleClickFeedback
 import com.example.mensajeria.ui.theme.AccessibleYellow
 import com.example.mensajeria.ui.theme.DarkCardBackground
 import com.example.mensajeria.ui.theme.PureBlack
@@ -62,7 +61,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Pantalla 2.2: Inicio de sesión accesible por voz con contraseña por toques laterales o PIN.
- * Gestiona de forma automática los permisos de micrófono y emite tonos auditivos de confirmación.
+ * Solicita de inmediato el permiso nativo del micrófono y escucha sin interrupciones.
  */
 @Composable
 fun AccessibleVoiceLoginScreen(
@@ -93,18 +92,21 @@ fun AccessibleVoiceLoginScreen(
         hasRecordPermission = isGranted
         if (isGranted) {
             authViewModel.soundService.playSuccessSound()
+            isListeningName = true
+            sidePatternEntered = ""
+            feedbackText = "Permiso concedido. Diga su nombre de usuario..."
+
             authViewModel.ttsService.speak(
-                "Permiso de micrófono concedido. Por favor, di tu nombre de usuario después del tono.",
+                "Permiso concedido. Di tu nombre de usuario en voz alta.",
                 onDone = {
                     coroutineScope.launch {
                         delay(350)
-                        isListeningName = true
                         authViewModel.startVoiceAuth()
                     }
                 }
             )
         } else {
-            feedbackText = "Permiso de micrófono no concedido. Pulse Reintentar para habilitarlo."
+            feedbackText = "Permiso de micrófono no concedido. Pulse Conceder Permiso para habilitarlo."
             authViewModel.ttsService.speak(
                 "El permiso de micrófono no fue concedido. Para iniciar sesión por voz, debes permitir el acceso al micrófono."
             )
@@ -113,12 +115,7 @@ fun AccessibleVoiceLoginScreen(
 
     fun startListeningForName() {
         if (!hasRecordPermission) {
-            authViewModel.ttsService.speak(
-                "Para iniciar sesión con tu voz, primero debemos habilitar el permiso de micrófono. Por favor acéptalo en el mensaje que aparecerá en pantalla.",
-                onDone = {
-                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                }
-            )
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             return
         }
 
@@ -126,7 +123,7 @@ fun AccessibleVoiceLoginScreen(
         sidePatternEntered = ""
         feedbackText = "Diga su nombre de usuario en voz alta..."
         authViewModel.ttsService.speak(
-            "Para iniciar sesión, por favor di tu nombre de usuario después del tono.",
+            "Para iniciar sesión, por favor di tu nombre de usuario en voz alta.",
             onDone = {
                 coroutineScope.launch {
                     delay(350)
@@ -137,7 +134,12 @@ fun AccessibleVoiceLoginScreen(
     }
 
     LaunchedEffect(Unit) {
-        startListeningForName()
+        if (!hasRecordPermission) {
+            authViewModel.ttsService.speak("Por favor, concede el permiso de micrófono en el mensaje de la pantalla.")
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        } else {
+            startListeningForName()
+        }
     }
 
     // Observar estado de usuario detectado por AuthViewModel
@@ -228,7 +230,13 @@ fun AccessibleVoiceLoginScreen(
                     VoiceAssistantLogo(
                         size = 180.dp,
                         isPulsing = isListeningName,
-                        onClick = { startListeningForName() }
+                        onClick = {
+                            if (!hasRecordPermission) {
+                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            } else {
+                                startListeningForName()
+                            }
+                        }
                     )
 
                     Spacer(modifier = Modifier.height(32.dp))
@@ -255,8 +263,20 @@ fun AccessibleVoiceLoginScreen(
                     Spacer(modifier = Modifier.height(28.dp))
 
                     AccessibleOutlinedButton(
-                        text = if (isListeningName) "Escuchando tu voz..." else "Reintentar Reconocimiento",
-                        onClick = { startListeningForName() },
+                        text = if (!hasRecordPermission) {
+                            "Conceder Permiso de Micrófono"
+                        } else if (isListeningName) {
+                            "Escuchando tu voz..."
+                        } else {
+                            "Reintentar Reconocimiento"
+                        },
+                        onClick = {
+                            if (!hasRecordPermission) {
+                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            } else {
+                                startListeningForName()
+                            }
+                        },
                         leadingIcon = Icons.Default.Mic
                     )
                 }

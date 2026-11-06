@@ -55,8 +55,6 @@ class SpeechService(private val context: Context) {
                 speechRecognizer?.setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
                         Log.d("SpeechService", "Micrófono activado y listo para capturar voz.")
-                        // Emitir tono auditivo (BEEP) y vibración táctil exactamente cuando el micrófono abre
-                        soundService.playListeningPromptSound()
                         vibrationService.vibrateStartListening()
                         mainHandler.post { onReady() }
                     }
