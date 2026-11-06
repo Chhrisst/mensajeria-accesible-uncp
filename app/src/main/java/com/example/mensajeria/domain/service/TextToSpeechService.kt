@@ -8,6 +8,7 @@ import java.util.Locale
 
 /**
  * Servicio encapsulado de Síntesis de Voz (Text-to-Speech) adaptado para personas invidentes.
+ * Soporta cola pendiente para anuncios solicitados antes de que el motor de voz termine de inicializarse.
  */
 class TextToSpeechService(
     context: Context,
@@ -16,6 +17,8 @@ class TextToSpeechService(
 
     private var tts: TextToSpeech? = TextToSpeech(context, this)
     private var isReady: Boolean = false
+    private var pendingText: String? = null
+    private var pendingOnDone: (() -> Unit)? = null
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
@@ -27,6 +30,16 @@ class TextToSpeechService(
             tts?.setSpeechRate(0.95f) // Ritmo ligeramente pausado para máxima inteligibilidad auditiva
             isReady = true
             onInitSuccess()
+
+            // Reproducir cualquier anuncio pendiente que se haya solicitado mientras cargaba el motor
+            val textToPlay = pendingText
+            val callbackToRun = pendingOnDone
+            pendingText = null
+            pendingOnDone = null
+
+            if (!textToPlay.isNullOrBlank()) {
+                speak(textToPlay, onDone = callbackToRun ?: {})
+            }
         }
     }
 
@@ -35,7 +48,14 @@ class TextToSpeechService(
         queueMode: Int = TextToSpeech.QUEUE_FLUSH,
         onDone: () -> Unit = {}
     ) {
-        if (!isReady || text.isBlank()) return
+        if (text.isBlank()) return
+
+        // Si el motor de Google aún se está conectando, guardamos el mensaje para decirlo apenas conecte
+        if (!isReady) {
+            pendingText = text
+            pendingOnDone = onDone
+            return
+        }
 
         val utteranceId = "msg_${System.currentTimeMillis()}"
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -53,10 +73,14 @@ class TextToSpeechService(
     }
 
     fun stop() {
+        pendingText = null
+        pendingOnDone = null
         tts?.stop()
     }
 
     fun shutdown() {
+        pendingText = null
+        pendingOnDone = null
         tts?.stop()
         tts?.shutdown()
         tts = null
