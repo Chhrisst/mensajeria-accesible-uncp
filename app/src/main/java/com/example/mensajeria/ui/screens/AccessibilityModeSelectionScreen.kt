@@ -17,8 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Accessible
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -46,8 +46,8 @@ import com.example.mensajeria.ui.theme.PureBlack
 import com.example.mensajeria.ui.theme.TextSecondaryGray
 
 /**
- * Pantalla 1: Selección inicial de accesibilidad.
- * Pregunta si el usuario tiene discapacidad visual o no para configurar la experiencia.
+ * Pantalla 1: Selección inicial de modo de accesibilidad.
+ * Pregunta cómo desea usar la app con dos opciones ergonómicas y bien proporcionadas.
  */
 @Composable
 fun AccessibilityModeSelectionScreen(
@@ -56,7 +56,7 @@ fun AccessibilityModeSelectionScreen(
 ) {
     LaunchedEffect(Unit) {
         onSpeakAnnouncement(
-            "Bienvenido. Por favor elige tu modo de uso. Pulsa el lado izquierdo si tienes discapacidad visual para activar el narrador de voz, retroalimentación táctil y controles laterales. Pulsa el lado derecho si no tienes discapacidad para usar la interfaz estándar tipo mensajería instantánea."
+            "¿Cómo deseas usar la app? Pulsa el lado izquierdo para Modo Accesible si tienes discapacidad visual. Pulsa el lado derecho para Modo Estándar sin discapacidad."
         )
     }
 
@@ -64,42 +64,42 @@ fun AccessibilityModeSelectionScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(PureBlack)
-            .padding(16.dp)
+            .padding(14.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Text(
                 text = "¿Cómo deseas usar la app?",
-                fontSize = 24.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 color = AccessibleYellow,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.semantics { heading() }
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             Text(
                 text = "Selecciona la opción adaptada a tus necesidades.",
-                fontSize = 15.sp,
+                fontSize = 14.sp,
                 color = TextSecondaryGray,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             // Pantalla dividida en dos paneles interactivos grandes
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Opción 1: LADO IZQUIERDO -> Con discapacidad visual (Modo Asistido)
+                // Opción 1: LADO IZQUIERDO -> Modo Accesible (Discapacidad visual)
                 Card(
                     modifier = Modifier
                         .weight(1f)
@@ -107,68 +107,95 @@ fun AccessibilityModeSelectionScreen(
                         .clickable { onSelectMode(true) }
                         .semantics {
                             this.role = Role.Button
-                            this.contentDescription = "Lado izquierdo: Tengo discapacidad visual. Activa narrador de voz, vibración y navegación táctil."
+                            this.contentDescription = "Lado izquierdo: Modo Accesible. Diseñado para personas con discapacidad visual. Activa narrador de voz, dictado y navegación por lados."
                         },
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(containerColor = DarkCardBackground),
-                    border = BorderStroke(2.5.dp, AccessibleYellow)
+                    border = BorderStroke(2.dp, AccessibleYellow)
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(16.dp),
+                            .padding(horizontal = 8.dp, vertical = 14.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                        verticalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(74.dp)
-                                .clip(CircleShape)
-                                .background(AccessibleYellow),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Accessible,
-                                contentDescription = null,
-                                tint = PureBlack,
-                                modifier = Modifier.size(42.dp)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            // Insignia / Pill Lado Izquierdo
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(AccessibleYellow.copy(alpha = 0.2f))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "LADO IZQUIERDO",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AccessibleYellow,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Ícono de Asistencia por Voz
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(CircleShape)
+                                    .background(AccessibleYellow),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.RecordVoiceOver,
+                                    contentDescription = null,
+                                    tint = PureBlack,
+                                    modifier = Modifier.size(34.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Text(
+                                text = "Modo\nAccesible",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 22.sp
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Text(
+                                text = "Discapacidad visual",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = AccessibleYellow,
+                                textAlign = TextAlign.Center
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        Text(
-                            text = "LADO IZQUIERDO",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AccessibleYellow,
-                            textAlign = TextAlign.Center
-                        )
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Text(
-                            text = "Tengo\ndiscapacidad\nvisual",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 26.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Text(
-                            text = "• Narrador de voz activo\n• Navegación por arrastre\n• Selección por lados\n• Dictado de mensajes",
-                            fontSize = 13.sp,
-                            color = TextSecondaryGray,
-                            lineHeight = 19.sp,
-                            textAlign = TextAlign.Center
-                        )
+                        // Lista de beneficios
+                        Column(
+                            horizontalAlignment = Alignment.Start,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp)
+                        ) {
+                            Text(
+                                text = "• Narrador de voz activo\n• Navegación por arrastre\n• Selección por lados\n• Dictado de mensajes",
+                                fontSize = 11.5.sp,
+                                color = TextSecondaryGray,
+                                lineHeight = 17.sp,
+                                textAlign = TextAlign.Start
+                            )
+                        }
                     }
                 }
 
-                // Opción 2: LADO DERECHO -> Sin discapacidad (Modo Estándar tipo WhatsApp)
+                // Opción 2: LADO DERECHO -> Modo Estándar (Sin discapacidad visual)
                 Card(
                     modifier = Modifier
                         .weight(1f)
@@ -176,69 +203,96 @@ fun AccessibilityModeSelectionScreen(
                         .clickable { onSelectMode(false) }
                         .semantics {
                             this.role = Role.Button
-                            this.contentDescription = "Lado derecho: Sin discapacidad visual. Modo estándar visual tipo WhatsApp."
+                            this.contentDescription = "Lado derecho: Modo Estándar. Para personas sin discapacidad visual. Interfaz convencional con teclado en pantalla."
                         },
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF141A1F)),
-                    border = BorderStroke(1.5.dp, Color(0xFF25D366))
+                    border = BorderStroke(2.dp, Color(0xFF25D366))
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(16.dp),
+                            .padding(horizontal = 8.dp, vertical = 14.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                        verticalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(74.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF25D366)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PhoneAndroid,
-                                contentDescription = null,
-                                tint = PureBlack,
-                                modifier = Modifier.size(40.dp)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            // Insignia / Pill Lado Derecho
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFF25D366).copy(alpha = 0.2f))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "LADO DERECHO",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF25D366),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Ícono de Celular estándar
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF25D366)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PhoneAndroid,
+                                    contentDescription = null,
+                                    tint = PureBlack,
+                                    modifier = Modifier.size(34.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Text(
+                                text = "Modo\nEstándar",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 22.sp
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Text(
+                                text = "Sin discapacidad",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF25D366),
+                                textAlign = TextAlign.Center
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        Text(
-                            text = "LADO DERECHO",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF25D366),
-                            textAlign = TextAlign.Center
-                        )
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Text(
-                            text = "Sin\ndiscapacidad\nvisual",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 26.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Text(
-                            text = "• Modo estándar WhatsApp\n• Teclado táctil en pantalla\n• Sin narrador obligatorio\n• Mensajería instantánea",
-                            fontSize = 13.sp,
-                            color = TextSecondaryGray,
-                            lineHeight = 19.sp,
-                            textAlign = TextAlign.Center
-                        )
+                        // Lista de beneficios
+                        Column(
+                            horizontalAlignment = Alignment.Start,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp)
+                        ) {
+                            Text(
+                                text = "• Modo tipo WhatsApp\n• Teclado en pantalla\n• Lectura visual\n• Mensajería rápida",
+                                fontSize = 11.5.sp,
+                                color = TextSecondaryGray,
+                                lineHeight = 17.sp,
+                                textAlign = TextAlign.Start
+                            )
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
         }
     }
 }

@@ -29,12 +29,14 @@ import com.example.mensajeria.ui.screens.StandardChatScreen
 import com.example.mensajeria.ui.screens.StandardContactListScreen
 import com.example.mensajeria.ui.screens.StandardLoginScreen
 import com.example.mensajeria.ui.screens.StandardRegisterScreen
+import com.example.mensajeria.ui.screens.WelcomeScreen
 import com.example.mensajeria.ui.theme.MensajeriaTheme
 import com.example.mensajeria.ui.viewmodel.AuthViewModel
 import com.example.mensajeria.ui.viewmodel.ChatViewModel
 
 enum class AppFlowScreen {
     PERMISSION_CHECK,
+    INITIAL_WELCOME,
     DISABILITY_SELECTION,
 
     // MODO CON DISCAPACIDAD VISUAL (ASISTIDO)
@@ -106,7 +108,7 @@ fun MensajeriaApp(
 ) {
     var currentScreen by remember {
         mutableStateOf(
-            if (initialHasPermission) AppFlowScreen.DISABILITY_SELECTION
+            if (initialHasPermission) AppFlowScreen.INITIAL_WELCOME
             else AppFlowScreen.PERMISSION_CHECK
         )
     }
@@ -123,7 +125,7 @@ fun MensajeriaApp(
             PermissionScreen(
                 onRequestPermission = {
                     onRequestPermission {
-                        currentScreen = AppFlowScreen.DISABILITY_SELECTION
+                        currentScreen = AppFlowScreen.INITIAL_WELCOME
                     }
                 },
                 onSpeakAnnouncement = { text ->
@@ -132,8 +134,23 @@ fun MensajeriaApp(
             )
         }
 
-        // 1. PREGUNTA DE DISCAPACIDAD
+        // 0.1 PANTALLA INICIAL DE BIENVENIDA CON NARRADOR "Bienvenido usuario"
+        AppFlowScreen.INITIAL_WELCOME -> {
+            WelcomeScreen(
+                onStartClick = {
+                    currentScreen = AppFlowScreen.DISABILITY_SELECTION
+                },
+                onSpeakAnnouncement = { text ->
+                    authViewModel.ttsService.speak(text)
+                }
+            )
+        }
+
+        // 1. PREGUNTA DE DISCAPACIDAD ("¿Cómo deseas usar la app?")
         AppFlowScreen.DISABILITY_SELECTION -> {
+            BackHandler {
+                currentScreen = AppFlowScreen.INITIAL_WELCOME
+            }
             AccessibilityModeSelectionScreen(
                 onSelectMode = { hasDisability ->
                     isDisabilityMode = hasDisability
