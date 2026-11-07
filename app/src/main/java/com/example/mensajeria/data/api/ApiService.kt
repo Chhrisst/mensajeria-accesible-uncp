@@ -28,4 +28,16 @@ interface ApiService {
 
     @POST("api/messages")
     suspend fun sendMessage(@Body request: ApiSendMessageRequest): Response<ApiMessageResponse>
+
+    // ==========================================
+    // ENDPOINTS DE INTELIGENCIA ARTIFICIAL (GEMINI)
+    // ==========================================
+    @POST("api/ai/summarize")
+    suspend fun summarizeMessage(@Body request: ApiAiSummarizeRequest): Response<ApiAiResponse>
+
+    @POST("api/ai/describe-image")
+    suspend fun describeImage(@Body request: ApiAiDescribeImageRequest): Response<ApiAiResponse>
+
+    @POST("api/ai/refine-speech")
+    suspend fun refineSpeech(@Body request: ApiAiRefineSpeechRequest): Response<ApiAiResponse>
 }

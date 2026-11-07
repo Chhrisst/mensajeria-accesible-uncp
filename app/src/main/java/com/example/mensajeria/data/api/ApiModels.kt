@@ -66,3 +66,24 @@ data class ApiMessageResponse(
     @SerializedName("created_at") val createdAt: String,
     @SerializedName("is_from_me") val isFromMe: Boolean = false
 )
+
+// ==========================================
+// MODELOS DE ASISTENCIA POR INTELIGENCIA ARTIFICIAL (GEMINI)
+// ==========================================
+data class ApiAiSummarizeRequest(
+    @SerializedName("text") val text: String
+)
+
+data class ApiAiDescribeImageRequest(
+    @SerializedName("image_base64") val imageBase64: String,
+    @SerializedName("mime_type") val mimeType: String = "image/jpeg"
+)
+
+data class ApiAiRefineSpeechRequest(
+    @SerializedName("raw_text") val rawText: String
+)
+
+data class ApiAiResponse(
+    @SerializedName("result") val result: String,
+    @SerializedName("status") val status: String = "success"
+)
