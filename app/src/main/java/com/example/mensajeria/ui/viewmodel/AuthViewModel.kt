@@ -3,6 +3,7 @@ package com.example.mensajeria.ui.viewmodel
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.mensajeria.data.api.RetrofitClient
 import com.example.mensajeria.data.model.LoginUiState
 import com.example.mensajeria.data.model.RegisterMethod
 import com.example.mensajeria.data.model.RegisterStep
@@ -114,21 +115,58 @@ class AuthViewModel(
     private fun processVoiceAccountName(recognizedName: String) {
         val found = authRepository.findUserByQuery(recognizedName)
         if (found != null) {
-            vibrationService.vibrateSuccess()
-            _voiceAuthState.update {
-                it.copy(
-                    phase = VoiceAuthPhase.ACCOUNT_DETECTED,
-                    detectedUser = found,
-                    feedbackMessage = "Cuenta detectada: ${found.name}. Escuchando PIN..."
-                )
-            }
-            ttsService.speak("Cuenta detectada: ${found.name}. Escuchando PIN de cuatro dígitos.", onDone = {
-                // Iniciar escucha del PIN
-                startListeningForPin(found)
-            })
+            handleAccountDetected(found)
         } else {
-            triggerVoiceError("No se encontró ninguna cuenta asociada a: \"$recognizedName\".")
+            viewModelScope.launch {
+                try {
+                    val response = RetrofitClient.api.getUsers()
+                    if (response.isSuccessful && response.body() != null) {
+                        val clean = recognizedName.trim().lowercase()
+                        val match = response.body()!!.firstOrNull { u ->
+                            val uName = u.name.trim().lowercase()
+                            uName.contains(clean) || clean.contains(uName) ||
+                            clean.replace(" ", "").contains(uName.replace(" ", "")) ||
+                            uName.replace(" ", "").contains(clean.replace(" ", ""))
+                        }
+                        if (match != null) {
+                            val desc = if (match.hasDisability) "Con discapacidad" else "Sin discapacidad"
+                            val profile = UserProfile(
+                                id = match.id,
+                                name = match.name,
+                                email = match.email ?: "",
+                                phone = match.phone ?: "",
+                                dni = match.dni ?: "",
+                                code = match.code ?: "123",
+                                sidePattern = match.sidePattern ?: "LRL",
+                                role = "Socio UNCP",
+                                description = desc,
+                                hasDisability = match.hasDisability,
+                                visualCondition = desc
+                            )
+                            authRepository.persistUser(profile)
+                            handleAccountDetected(profile)
+                            return@launch
+                        }
+                    }
+                } catch (_: Exception) {}
+                triggerVoiceError("No se encontró ninguna cuenta asociada a: \"$recognizedName\".")
+            }
         }
+    }
+
+    private fun handleAccountDetected(found: UserProfile) {
+        vibrationService.vibrateSuccess()
+        _voiceAuthState.update {
+            it.copy(
+                phase = VoiceAuthPhase.ACCOUNT_DETECTED,
+                detectedUser = found,
+                feedbackMessage = "Cuenta detectada: ${found.name}. Escuchando PIN..."
+            )
+        }
+        ttsService.speak("Cuenta detectada: ${found.name}. Escuchando PIN de cuatro dígitos.", onDone = {
+            // Iniciar escucha del PIN
+            startListeningForPin(found)
+        })
     }
 
     /**

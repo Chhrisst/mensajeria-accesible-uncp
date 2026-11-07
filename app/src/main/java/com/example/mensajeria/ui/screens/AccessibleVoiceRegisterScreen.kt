@@ -198,18 +198,21 @@ fun AccessibleVoiceRegisterScreen(
         if (newPattern.length == 4) {
             authViewModel.soundService.playSuccessSound()
             authViewModel.vibrationService.vibrateSuccess()
-            val newUser = authViewModel.authRepository.registerUser(
-                RegistrationForm(
-                    fullName = registeredName,
+            authViewModel.ttsService.speak("Registrando en el sistema UNCP...")
+            coroutineScope.launch {
+                val form = RegistrationForm(
+                    fullName = registeredName.trim(),
                     pin = newPattern,
                     hasDisability = true,
-                    visualCondition = "Ceguera total"
+                    visualCondition = "Con discapacidad"
                 )
-            )
-            authViewModel.ttsService.speak(
-                "Registro completado exitosamente. Bienvenido ${newUser.name} a Mensajería UNCP."
-            )
-            onRegistrationSuccess(newUser)
+                val result = authViewModel.authRepository.registerRemote(form)
+                val newUser = result.getOrNull() ?: authViewModel.authRepository.registerUser(form)
+                authViewModel.ttsService.speak(
+                    "Registro completado exitosamente. Bienvenido ${newUser.name} a Mensajería UNCP."
+                )
+                onRegistrationSuccess(newUser)
+            }
         }
     }
 

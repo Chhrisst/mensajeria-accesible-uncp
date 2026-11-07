@@ -142,7 +142,7 @@ fun MensajeriaApp(
 
     var isDisabilityMode by remember { mutableStateOf(true) }
     val contacts by chatRepository.contacts.collectAsState()
-    var selectedContact by remember { mutableStateOf(contacts.firstOrNull() ?: Contact("c1", "Lic. Ana Ramos")) }
+    var selectedContact by remember { mutableStateOf(contacts.firstOrNull() ?: Contact("22222222-2222-2222-2222-222222222222", "Romell Rivera", description = "Con discapacidad")) }
     val authState by authViewModel.uiState.collectAsState()
 
     val currentUser = authState.authenticatedUser ?: authViewModel.authRepository.predefinedUsers.first()
@@ -279,6 +279,9 @@ fun MensajeriaApp(
                 authViewModel.logout()
                 currentScreen = AppFlowScreen.ACCESSIBLE_WELCOME
             }
+            androidx.compose.runtime.LaunchedEffect(currentUser.name) {
+                chatRepository.syncContactsFromRemote(currentUser.name)
+            }
             AccessibleContactListScreen(
                 currentUser = currentUser,
                 contacts = contacts,
@@ -351,6 +354,9 @@ fun MensajeriaApp(
             BackHandler {
                 authViewModel.logout()
                 currentScreen = AppFlowScreen.STANDARD_LOGIN
+            }
+            androidx.compose.runtime.LaunchedEffect(currentUser.name) {
+                chatRepository.syncContactsFromRemote(currentUser.name)
             }
             StandardContactListScreen(
                 currentUser = currentUser,

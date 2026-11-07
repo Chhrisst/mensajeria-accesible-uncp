@@ -21,68 +21,80 @@ class AuthRepository(private val context: Context? = null) {
 
         private val _users = mutableListOf(
             UserProfile(
-                id = "u1",
-                name = "Romell Rivera",
-                email = "romell@gmail.com",
-                phone = "987 654 321",
-                dni = "72345678",
-                code = "123",
-                sidePattern = "LRLR",
-                role = "Socio Activo UNCP",
-                description = "Socio Activo UNCP",
-                hasDisability = true,
-                visualCondition = "Baja visión"
-            ),
-            UserProfile(
-                id = "u2",
+                id = "11111111-1111-1111-1111-111111111111",
                 name = "Christian Beteta",
                 email = "christian@gmail.com",
                 phone = "912 345 678",
                 dni = "71234567",
                 code = "123",
-                sidePattern = "LRLR",
+                sidePattern = "LRL",
                 role = "Socio UNCP",
-                description = "Taller de Tecnologías Adaptadas",
+                description = "Con discapacidad",
                 hasDisability = true,
-                visualCondition = "Baja visión"
+                visualCondition = "Con discapacidad"
             ),
             UserProfile(
-                id = "u3",
+                id = "22222222-2222-2222-2222-222222222222",
+                name = "Romell Rivera",
+                email = "romell@gmail.com",
+                phone = "987 654 321",
+                dni = "72345678",
+                code = "123",
+                sidePattern = "LRR",
+                role = "Socio UNCP",
+                description = "Con discapacidad",
+                hasDisability = true,
+                visualCondition = "Con discapacidad"
+            ),
+            UserProfile(
+                id = "33333333-3333-3333-3333-333333333333",
                 name = "Miguel Retuerto",
                 email = "miguel@gmail.com",
                 phone = "998 877 665",
                 dni = "73456789",
                 code = "456",
-                sidePattern = "LRLR",
+                sidePattern = "LLR",
                 role = "Socio UNCP",
-                description = "Comité de Comunicaciones",
+                description = "Con discapacidad",
                 hasDisability = true,
-                visualCondition = "Ceguera total"
+                visualCondition = "Con discapacidad"
             ),
             UserProfile(
-                id = "u4",
+                id = "44444444-4444-4444-4444-444444444444",
                 name = "Juan Perez García",
                 email = "juan@gmail.com",
                 phone = "987 654 321",
                 dni = "74567890",
                 code = "123",
-                sidePattern = "LRLR",
+                sidePattern = "RLR",
                 role = "Socio UNCP",
-                description = "Usuario Registrado",
+                description = "Con discapacidad",
                 hasDisability = true,
-                visualCondition = "Ceguera total"
+                visualCondition = "Con discapacidad"
             ),
             UserProfile(
-                id = "u5",
+                id = "47bc3462-6f1c-45dc-a211-71bc7c1a8903",
+                name = "Christian",
+                email = "christian_beteta_15@hotmail.com",
+                phone = "998292048",
+                code = "123456",
+                sidePattern = "LRL",
+                role = "Socio UNCP",
+                description = "Sin discapacidad",
+                hasDisability = false,
+                visualCondition = "Sin discapacidad"
+            ),
+            UserProfile(
+                id = "55555555-5555-5555-5555-555555555555",
                 name = "Socio Invitado",
                 email = "invitado@uncp.pe",
                 phone = "900 000 000",
                 code = "000",
-                sidePattern = "LRLR",
-                role = "Participante Experimental",
-                description = "Perfil de evaluación y pruebas",
+                sidePattern = "LLL",
+                role = "Socio UNCP",
+                description = "Con discapacidad",
                 hasDisability = true,
-                visualCondition = "Ceguera total"
+                visualCondition = "Con discapacidad"
             )
         )
     }
@@ -107,15 +119,21 @@ class AuthRepository(private val context: Context? = null) {
                 val type = object : TypeToken<List<UserProfile>>() {}.type
                 val savedList: List<UserProfile> = gson.fromJson(json, type)
                 savedList.reversed().forEach { savedUser ->
-                    if (_users.none { it.id == savedUser.id || it.name.equals(savedUser.name, ignoreCase = true) }) {
-                        _users.add(0, savedUser)
+                    val cleanDesc = if (savedUser.hasDisability) "Con discapacidad" else "Sin discapacidad"
+                    val standardized = savedUser.copy(
+                        role = "Socio UNCP",
+                        description = cleanDesc,
+                        visualCondition = cleanDesc
+                    )
+                    if (_users.none { it.id == standardized.id || it.name.equals(standardized.name, ignoreCase = true) }) {
+                        _users.add(0, standardized)
                     }
                 }
             }
         } catch (_: Exception) {}
     }
 
-    private fun persistUser(user: UserProfile) {
+    fun persistUser(user: UserProfile) {
         val ctx = getEffectiveContext() ?: return
         try {
             val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -194,18 +212,19 @@ class AuthRepository(private val context: Context? = null) {
     }
 
     fun registerUser(form: com.example.mensajeria.data.model.RegistrationForm): UserProfile {
+        val desc = if (form.hasDisability) "Con discapacidad" else "Sin discapacidad"
         val newUser = UserProfile(
             name = form.fullName.ifBlank { "Nuevo Socio" },
             email = form.email,
             phone = form.phone,
             dni = form.dni,
             birthDate = form.birthDate,
-            code = form.pin.ifBlank { "1234" },
-            sidePattern = form.pin.ifBlank { "LRLR" },
-            role = "Socio Activo UNCP",
-            description = if (form.hasDisability) form.visualCondition else "Sin discapacidad",
+            code = form.pin.ifBlank { "123" },
+            sidePattern = form.pin.ifBlank { "LRL" },
+            role = "Socio UNCP",
+            description = desc,
             hasDisability = form.hasDisability,
-            visualCondition = form.visualCondition
+            visualCondition = desc
         )
         _users.add(0, newUser)
         _currentUser.value = newUser
@@ -220,19 +239,22 @@ class AuthRepository(private val context: Context? = null) {
             )
             if (response.isSuccessful && response.body() != null) {
                 val b = response.body()!!
+                val desc = if (b.hasDisability) "Con discapacidad" else "Sin discapacidad"
                 val profile = UserProfile(
                     id = b.id,
                     name = b.name,
-                    email = b.email,
+                    email = b.email ?: "",
                     phone = b.phone ?: "",
                     dni = b.dni ?: "",
-                    code = b.code,
-                    role = b.role,
-                    description = b.description ?: "",
+                    code = b.code ?: passwordOrPin,
+                    sidePattern = b.sidePattern ?: passwordOrPin,
+                    role = "Socio UNCP",
+                    description = desc,
                     hasDisability = b.hasDisability,
-                    visualCondition = b.visualCondition
+                    visualCondition = desc
                 )
                 _currentUser.value = profile
+                persistUser(profile)
                 Result.success(profile)
             } else {
                 val localUser = findUserByQuery(query)
@@ -256,16 +278,24 @@ class AuthRepository(private val context: Context? = null) {
 
     suspend fun registerRemote(form: com.example.mensajeria.data.model.RegistrationForm): Result<UserProfile> {
         return try {
+            val emailToSend = if (!form.email.isNullOrBlank()) {
+                form.email.trim().lowercase()
+            } else {
+                val clean = form.fullName.filter { it.isLetterOrDigit() }.lowercase().ifBlank { "socio" }
+                val suffix = java.util.UUID.randomUUID().toString().substring(0, 6)
+                "${clean}_${suffix}@uncp.pe"
+            }
+            val desc = if (form.hasDisability) "Con discapacidad" else "Sin discapacidad"
             val req = com.example.mensajeria.data.api.ApiRegisterRequest(
                 fullName = form.fullName,
-                email = form.email,
+                email = emailToSend,
                 phone = form.phone,
                 dni = form.dni,
                 birthDate = form.birthDate,
                 pin = form.pin.ifBlank { "123" },
-                sidePattern = "LRL",
+                sidePattern = form.pin.ifBlank { "LRL" },
                 hasDisability = form.hasDisability,
-                visualCondition = form.visualCondition
+                visualCondition = desc
             )
             val response = com.example.mensajeria.data.api.RetrofitClient.api.register(req)
             if (response.isSuccessful && response.body() != null) {
@@ -273,17 +303,19 @@ class AuthRepository(private val context: Context? = null) {
                 val profile = UserProfile(
                     id = b.id,
                     name = b.name,
-                    email = b.email,
+                    email = b.email ?: emailToSend,
                     phone = b.phone ?: "",
                     dni = b.dni ?: "",
-                    code = b.code,
-                    role = b.role,
-                    description = b.description ?: "",
+                    code = b.code ?: form.pin,
+                    sidePattern = b.sidePattern ?: form.pin,
+                    role = "Socio UNCP",
+                    description = desc,
                     hasDisability = b.hasDisability,
-                    visualCondition = b.visualCondition
+                    visualCondition = desc
                 )
                 _users.add(0, profile)
                 _currentUser.value = profile
+                persistUser(profile)
                 Result.success(profile)
             } else {
                 val local = registerUser(form)

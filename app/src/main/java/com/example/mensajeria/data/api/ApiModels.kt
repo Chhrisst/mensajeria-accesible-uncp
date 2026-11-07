@@ -9,28 +9,28 @@ data class ApiLoginRequest(
 
 data class ApiRegisterRequest(
     @SerializedName("full_name") val fullName: String,
-    @SerializedName("email") val email: String,
+    @SerializedName("email") val email: String? = null,
     @SerializedName("phone") val phone: String? = null,
     @SerializedName("dni") val dni: String? = null,
     @SerializedName("birth_date") val birthDate: String? = null,
     @SerializedName("pin") val pin: String = "1234",
     @SerializedName("side_pattern") val sidePattern: String = "LRLR",
     @SerializedName("has_disability") val hasDisability: Boolean = true,
-    @SerializedName("visual_condition") val visualCondition: String = "Baja visión"
+    @SerializedName("visual_condition") val visualCondition: String = "Con discapacidad"
 )
 
 data class ApiUserResponse(
     @SerializedName("id") val id: String,
     @SerializedName("name") val name: String,
-    @SerializedName("email") val email: String,
+    @SerializedName("email") val email: String? = null,
     @SerializedName("phone") val phone: String? = null,
     @SerializedName("dni") val dni: String? = null,
-    @SerializedName("code") val code: String = "1234",
-    @SerializedName("side_pattern") val sidePattern: String = "LRLR",
+    @SerializedName("code") val code: String? = null,
+    @SerializedName("side_pattern") val sidePattern: String? = null,
     @SerializedName("role") val role: String = "Socio UNCP",
     @SerializedName("description") val description: String? = null,
     @SerializedName("has_disability") val hasDisability: Boolean = true,
-    @SerializedName("visual_condition") val visualCondition: String = "Baja visión"
+    @SerializedName("visual_condition") val visualCondition: String = "Con discapacidad"
 )
 
 data class ApiContactResponse(
