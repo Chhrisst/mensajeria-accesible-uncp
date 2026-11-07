@@ -138,7 +138,7 @@ class AuthViewModel(
                                 dni = match.dni ?: "",
                                 code = match.code ?: "123",
                                 sidePattern = match.sidePattern ?: "LRL",
-                                role = "Socio UNCP",
+                                role = "Usuario",
                                 description = desc,
                                 hasDisability = match.hasDisability,
                                 visualCondition = desc

@@ -27,7 +27,7 @@ data class ApiUserResponse(
     @SerializedName("dni") val dni: String? = null,
     @SerializedName("code") val code: String? = null,
     @SerializedName("side_pattern") val sidePattern: String? = null,
-    @SerializedName("role") val role: String = "Socio UNCP",
+    @SerializedName("role") val role: String = "Usuario",
     @SerializedName("description") val description: String? = null,
     @SerializedName("has_disability") val hasDisability: Boolean = true,
     @SerializedName("visual_condition") val visualCondition: String = "Con discapacidad"
