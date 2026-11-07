@@ -297,7 +297,7 @@ fun AccessibleContactListScreen(
                 AccessibleVoiceAssistantBar(
                     state = assistantState,
                     onAssistantClick = {
-                        voiceAssistantManager.startListeningCycle(explicitPrompt = true)
+                        voiceAssistantManager.triggerExplicitActivation()
                     }
                 )
             }

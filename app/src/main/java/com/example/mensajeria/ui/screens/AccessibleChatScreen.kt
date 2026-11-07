@@ -489,7 +489,7 @@ fun AccessibleChatScreen(
                         AccessibleVoiceAssistantBar(
                             state = assistantState,
                             onAssistantClick = {
-                                voiceAssistantManager.startListeningCycle(explicitPrompt = true)
+                                voiceAssistantManager.triggerExplicitActivation()
                             }
                         )
                     }

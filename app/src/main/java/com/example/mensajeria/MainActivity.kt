@@ -174,7 +174,8 @@ fun MensajeriaApp(
         }
 
         if (currentScreen == AppFlowScreen.ACCESSIBLE_CONTACTS || currentScreen == AppFlowScreen.ACCESSIBLE_CHAT) {
-            voiceAssistantManager.startListeningCycle(explicitPrompt = false)
+            kotlinx.coroutines.delay(1600L) // Permitir que la narración de entrada termine con calma
+            voiceAssistantManager.startPassiveWakeWordListening()
         } else {
             voiceAssistantManager.stopAssistant()
         }

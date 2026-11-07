@@ -19,21 +19,30 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * Estado observable del Asistente de Voz Inteligente impulsado por Gemini.
+ * Modos de interacción del Asistente de Voz Inteligente.
+ */
+enum class AssistantMode {
+    STANDBY,           // En reposo visual (no animaciones, bar tranquilo)
+    ACTIVE_LISTENING,  // Activado tras decir "Ok Asistente" o tras tocar la barra. Micrófono abierto para recibir la orden.
+    PROCESSING,        // Consultando con Gemini AI
+    SPEAKING           // Narrando respuesta al usuario
+}
+
+/**
+ * Estado observable del Asistente de Voz.
  */
 data class VoiceAssistantState(
-    val isListening: Boolean = false,
-    val isProcessing: Boolean = false,
-    val isSpeaking: Boolean = false,
+    val mode: AssistantMode = AssistantMode.STANDBY,
     val isContinuousMode: Boolean = true,
     val lastRecognizedText: String = "",
-    val feedbackMessage: String = "Di 'Ok, Asistente'"
+    val feedbackMessage: String = "Di 'Ok, Asistente' o toca para hablar"
 )
 
 /**
  * Gestor del Asistente de Voz Autónomo e Interactivo de la UNCP.
- * Requiere estrictamente la frase de activación "Ok, Asistente" para despertar en segundo plano,
- * o un toque táctil explícito, evitando activaciones accidentales por ruido ambiental.
+ * Inicia siempre en modo STANDBY (en reposo) y solo se activa cuando:
+ * 1. El usuario dice "Ok, Asistente"
+ * 2. El usuario toca la tarjeta del Asistente
  */
 class VoiceAssistantManager(
     private val context: Context,
@@ -63,44 +72,79 @@ class VoiceAssistantManager(
     private var restartRunnable: Runnable? = null
 
     /**
-     * Inicia o reinicia el ciclo de escucha para comandos de voz.
+     * Inicia la escucha pasiva en segundo plano para detectar "Ok, Asistente".
+     * Mantiene la interfaz visual en STANDBY (en reposo) sin alarmar al usuario.
      */
-    fun startListeningCycle(explicitPrompt: Boolean = false) {
+    fun startPassiveWakeWordListening() {
         if (isDestroyed) return
-        if (_state.value.isSpeaking || _state.value.isProcessing) return
+        if (_state.value.mode == AssistantMode.SPEAKING || _state.value.mode == AssistantMode.PROCESSING) return
 
         cancelScheduledRestart()
-
-        if (explicitPrompt) {
-            isAwaitingCommand = true
-            soundService.playButtonClickSound()
-            vibrationService.vibrateStartListening()
-        }
+        isAwaitingCommand = false
 
         _state.update {
             it.copy(
-                isListening = true,
-                feedbackMessage = if (isAwaitingCommand) "Te escucho..." else "Di 'Ok, Asistente'..."
+                mode = AssistantMode.STANDBY,
+                feedbackMessage = "Di 'Ok, Asistente' o toca para hablar"
             )
         }
 
         speechService.startListening(
             onReady = {
-                _state.update { it.copy(isListening = true) }
+                // Micrófono abierto en segundo plano discretamente
             },
             onResult = { recognizedText ->
-                _state.update { it.copy(isListening = false, lastRecognizedText = recognizedText) }
-                processSpokenText(recognizedText, isExplicit = explicitPrompt)
+                _state.update { it.copy(lastRecognizedText = recognizedText) }
+                handlePassiveResult(recognizedText)
             },
             onError = { errorMsg ->
-                _state.update { it.copy(isListening = false) }
-                // Si estaba esperando la orden y hubo tiempo de espera, restablecer
-                if (isAwaitingCommand) {
-                    isAwaitingCommand = false
-                    _state.update { it.copy(feedbackMessage = "Di 'Ok, Asistente'") }
+                // Timeout normal de silencio en segundo plano: reiniciar suavemente
+                if (_state.value.isContinuousMode && !isDestroyed && _state.value.mode == AssistantMode.STANDBY) {
+                    scheduleListeningRestart(1200L)
                 }
+            }
+        )
+    }
 
-                // Si está en modo continuo y no está destruido, reiniciar suavemente
+    /**
+     * Activación explícita mediante toque de pantalla en la barra del Asistente.
+     */
+    fun triggerExplicitActivation() {
+        if (isDestroyed) return
+        cancelScheduledRestart()
+
+        soundService.playMessageReceivedSound()
+        vibrationService.vibrateStartListening()
+
+        isAwaitingCommand = true
+        _state.update {
+            it.copy(
+                mode = AssistantMode.ACTIVE_LISTENING,
+                feedbackMessage = "Te escucho... Di tu orden"
+            )
+        }
+
+        speechService.startListening(
+            onReady = {
+                _state.update {
+                    it.copy(
+                        mode = AssistantMode.ACTIVE_LISTENING,
+                        feedbackMessage = "Te escucho... Di tu orden"
+                    )
+                }
+            },
+            onResult = { recognizedText ->
+                _state.update { it.copy(lastRecognizedText = recognizedText) }
+                processCommandPhrase(recognizedText)
+            },
+            onError = { errorMsg ->
+                isAwaitingCommand = false
+                _state.update {
+                    it.copy(
+                        mode = AssistantMode.STANDBY,
+                        feedbackMessage = "Di 'Ok, Asistente' o toca para hablar"
+                    )
+                }
                 if (_state.value.isContinuousMode && !isDestroyed) {
                     scheduleListeningRestart(1000L)
                 }
@@ -109,111 +153,70 @@ class VoiceAssistantManager(
     }
 
     /**
-     * Detecta si la frase contiene la palabra clave estricta "Ok, Asistente".
-     * Devuelve Pair(hasWakeWord, commandPart).
+     * Procesa lo capturado en modo pasivo, buscando estrictamente "Ok, Asistente".
      */
-    private fun extractWakeWordAndCommand(text: String): Pair<Boolean, String> {
-        val lower = text.trim().lowercase()
-        val normalized = lower
-            .replace(",", " ")
-            .replace(".", " ")
-            .replace("á", "a")
-            .replace("é", "e")
-            .replace("í", "i")
-            .replace("ó", "o")
-            .replace("ú", "u")
-            .replace(Regex("\\s+"), " ")
-
-        // Patrones estrictos de activación para "Ok, Asistente"
-        val wakePatterns = listOf(
-            "ok asistente",
-            "okay asistente",
-            "okey asistente",
-            "oye asistente",
-            "hola asistente"
-        )
-
-        for (pattern in wakePatterns) {
-            val idx = normalized.indexOf(pattern)
-            if (idx != -1) {
-                val commandPart = lower.substring((idx + pattern.length).coerceAtMost(lower.length)).trim()
-                return Pair(true, commandPart)
-            }
-        }
-        return Pair(false, "")
-    }
-
-    /**
-     * Procesa la frase hablada por el usuario con estricto control de activación.
-     */
-    private fun processSpokenText(text: String, isExplicit: Boolean) {
+    private fun handlePassiveResult(text: String) {
         val cleanText = text.trim()
         if (cleanText.isBlank()) {
             if (_state.value.isContinuousMode && !isDestroyed) {
-                scheduleListeningRestart(700L)
+                scheduleListeningRestart(800L)
             }
             return
         }
 
-        // Caso 1: El asistente ya fue activado previamente y estaba esperando la orden
-        if (isAwaitingCommand || isExplicit) {
-            isAwaitingCommand = false
-            executeCommandWithGemini(cleanText)
-            return
-        }
-
-        // Caso 2: Escuchando pasivamente en segundo plano -> EXIGE estrictamente "Ok, Asistente"
         val (hasWakeWord, commandPart) = extractWakeWordAndCommand(cleanText)
         if (!hasWakeWord) {
-            // Se ignora cualquier otra conversación o ruido ambiental
-            Log.d("VoiceAssistant", "Audio ignorado por no incluir 'Ok, Asistente': $cleanText")
+            // Conversación ajena o ruido: ignorar completamente
+            Log.d("VoiceAssistant", "Ignorando audio sin 'Ok, Asistente': $cleanText")
             if (_state.value.isContinuousMode && !isDestroyed) {
-                scheduleListeningRestart(600L)
+                scheduleListeningRestart(800L)
             }
             return
         }
 
-        // ¡Palabra clave "Ok, Asistente" detectada!
+        // ¡"Ok, Asistente" detectado!
         soundService.playMessageReceivedSound()
         vibrationService.vibrateSuccess()
 
         if (commandPart.isNotBlank()) {
-            // El usuario dijo la orden en una sola frase: "Ok asistente, entra al chat con Ana"
-            executeCommandWithGemini(commandPart)
+            // El usuario dijo la orden completa de corrido (ej. "Ok asistente entra al chat con Ana")
+            processCommandPhrase(commandPart)
         } else {
-            // El usuario solo dijo "Ok, Asistente" y esperó respuesta
+            // El usuario solo dijo "Ok Asistente" y esperó
             isAwaitingCommand = true
             _state.update {
                 it.copy(
-                    isSpeaking = true,
+                    mode = AssistantMode.SPEAKING,
                     feedbackMessage = "¡Ok Asistente activado! Te escucho..."
                 )
             }
+
             ttsService.speak(
                 "¿Sí? Te escucho.",
                 onDone = {
-                    _state.update {
-                        it.copy(
-                            isSpeaking = false,
-                            feedbackMessage = "Dime tu orden..."
-                        )
-                    }
-                    startListeningCycle(explicitPrompt = false)
+                    triggerExplicitActivation()
                 }
             )
         }
     }
 
     /**
-     * Envía la orden del usuario a Gemini AI y ejecuta la acción correspondiente.
+     * Procesa la orden directa del usuario enviándola a Gemini.
      */
-    private fun executeCommandWithGemini(commandText: String) {
+    private fun processCommandPhrase(commandText: String) {
+        isAwaitingCommand = false
+        val cleanCommand = commandText.trim()
+        if (cleanCommand.isBlank()) {
+            startPassiveWakeWordListening()
+            return
+        }
+
         soundService.playButtonClickSound()
         vibrationService.vibrateSuccess()
 
         _state.update {
             it.copy(
-                isProcessing = true,
+                mode = AssistantMode.PROCESSING,
                 feedbackMessage = "Consultando con Inteligencia Artificial..."
             )
         }
@@ -231,35 +234,68 @@ class VoiceAssistantManager(
                 recentMessages = recentMessages
             )
 
-            val result = GeminiDirectClient.processVoiceCommand(commandText, assistantContext)
+            val result = GeminiDirectClient.processVoiceCommand(cleanCommand, assistantContext)
 
             _state.update {
                 it.copy(
-                    isProcessing = false,
-                    isSpeaking = true,
+                    mode = AssistantMode.SPEAKING,
                     feedbackMessage = result.spokenResponse
                 )
             }
 
-            // Ejecutar la acción resuelta por la IA
+            // Ejecutar la mutación de estado o navegación
             executeAction(result)
 
-            // Narrar la respuesta por voz al usuario ciego
+            // Narrar la respuesta por voz al usuario
             ttsService.speak(
                 result.spokenResponse,
                 onDone = {
                     _state.update {
                         it.copy(
-                            isSpeaking = false,
-                            feedbackMessage = "Di 'Ok, Asistente'"
+                            mode = AssistantMode.STANDBY,
+                            feedbackMessage = "Di 'Ok, Asistente' o toca para hablar"
                         )
                     }
                     if (_state.value.isContinuousMode && !isDestroyed) {
-                        scheduleListeningRestart(600L)
+                        scheduleListeningRestart(800L)
                     }
                 }
             )
         }
+    }
+
+    /**
+     * Detecta "Ok, Asistente" y sus variantes comunes de pronunciación en español.
+     */
+    private fun extractWakeWordAndCommand(text: String): Pair<Boolean, String> {
+        val lower = text.trim().lowercase()
+        val normalized = lower
+            .replace(",", " ")
+            .replace(".", " ")
+            .replace("á", "a")
+            .replace("é", "e")
+            .replace("í", "i")
+            .replace("ó", "o")
+            .replace("ú", "u")
+            .replace(Regex("\\s+"), " ")
+
+        val wakePatterns = listOf(
+            "ok asistente",
+            "okay asistente",
+            "okey asistente",
+            "oye asistente",
+            "hola asistente",
+            "asistente"
+        )
+
+        for (pattern in wakePatterns) {
+            val idx = normalized.indexOf(pattern)
+            if (idx != -1) {
+                val commandPart = lower.substring((idx + pattern.length).coerceAtMost(lower.length)).trim()
+                return Pair(true, commandPart)
+            }
+        }
+        return Pair(false, "")
     }
 
     /**
@@ -331,8 +367,8 @@ class VoiceAssistantManager(
     private fun scheduleListeningRestart(delayMs: Long) {
         cancelScheduledRestart()
         restartRunnable = Runnable {
-            if (!isDestroyed && !_state.value.isSpeaking && !_state.value.isProcessing) {
-                startListeningCycle(explicitPrompt = false)
+            if (!isDestroyed && _state.value.mode == AssistantMode.STANDBY) {
+                startPassiveWakeWordListening()
             }
         }
         mainHandler.postDelayed(restartRunnable!!, delayMs)
@@ -347,15 +383,11 @@ class VoiceAssistantManager(
         cancelScheduledRestart()
         isAwaitingCommand = false
         speechService.stopListening()
-        _state.update { it.copy(isListening = false, isProcessing = false) }
-    }
-
-    fun setContinuousMode(enabled: Boolean) {
-        _state.update { it.copy(isContinuousMode = enabled) }
-        if (!enabled) {
-            stopAssistant()
-        } else {
-            startListeningCycle(explicitPrompt = false)
+        _state.update {
+            it.copy(
+                mode = AssistantMode.STANDBY,
+                feedbackMessage = "Di 'Ok, Asistente' o toca para hablar"
+            )
         }
     }
 

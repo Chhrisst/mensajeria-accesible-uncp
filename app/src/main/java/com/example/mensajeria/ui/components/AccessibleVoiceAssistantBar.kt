@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.mensajeria.domain.service.AssistantMode
 import com.example.mensajeria.domain.service.VoiceAssistantState
 import com.example.mensajeria.ui.theme.AccessibleYellow
 import com.example.mensajeria.ui.theme.DarkCardBackground
@@ -59,10 +60,11 @@ fun AccessibleVoiceAssistantBar(
     onAssistantClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isActivelyCapturing = state.mode == AssistantMode.ACTIVE_LISTENING || state.mode == AssistantMode.PROCESSING
     val infiniteTransition = rememberInfiniteTransition(label = "assistant_pulse")
     val scaleAnim by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = if (state.isListening || state.isProcessing) 1.15f else 1f,
+        targetValue = if (isActivelyCapturing) 1.15f else 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 650, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -70,25 +72,24 @@ fun AccessibleVoiceAssistantBar(
         label = "pulse_scale"
     )
 
-    val containerBg = when {
-        state.isProcessing -> AccessibleYellow
-        state.isListening -> AccessibleYellow.copy(alpha = 0.25f)
-        state.isSpeaking -> DarkCardBackground
-        else -> DarkCardBackground
+    val containerBg = when (state.mode) {
+        AssistantMode.ACTIVE_LISTENING -> AccessibleYellow.copy(alpha = 0.25f)
+        AssistantMode.PROCESSING -> AccessibleYellow
+        AssistantMode.SPEAKING -> DarkCardBackground
+        AssistantMode.STANDBY -> DarkCardBackground
     }
 
-    val iconColor = when {
-        state.isProcessing -> PureBlack
-        state.isListening -> AccessibleYellow
-        state.isSpeaking -> AccessibleYellow
+    val iconColor = when (state.mode) {
+        AssistantMode.PROCESSING -> PureBlack
+        AssistantMode.ACTIVE_LISTENING -> AccessibleYellow
         else -> AccessibleYellow
     }
 
-    val statusTitle = when {
-        state.isProcessing -> "Asistente pensando..."
-        state.isListening -> "Escuchando comando..."
-        state.isSpeaking -> "Asistente respondiendo..."
-        else -> "Asistente de Voz IA"
+    val statusTitle = when (state.mode) {
+        AssistantMode.ACTIVE_LISTENING -> "¡Te escucho! Di tu orden..."
+        AssistantMode.PROCESSING -> "Asistente pensando..."
+        AssistantMode.SPEAKING -> "Asistente respondiendo..."
+        AssistantMode.STANDBY -> "Asistente de Voz IA"
     }
 
     Card(
@@ -115,21 +116,21 @@ fun AccessibleVoiceAssistantBar(
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .scale(if (state.isListening || state.isProcessing) scaleAnim else 1f)
+                    .scale(if (isActivelyCapturing) scaleAnim else 1f)
                     .background(
-                        color = if (state.isProcessing) PureBlack else AccessibleYellow.copy(alpha = 0.15f),
+                        color = if (state.mode == AssistantMode.PROCESSING) PureBlack else AccessibleYellow.copy(alpha = 0.15f),
                         shape = CircleShape
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = when {
-                        state.isProcessing -> Icons.Default.AutoAwesome
-                        state.isSpeaking -> Icons.AutoMirrored.Filled.VolumeUp
+                    imageVector = when (state.mode) {
+                        AssistantMode.PROCESSING -> Icons.Default.AutoAwesome
+                        AssistantMode.SPEAKING -> Icons.AutoMirrored.Filled.VolumeUp
                         else -> Icons.Default.Mic
                     },
                     contentDescription = null,
-                    tint = if (state.isProcessing) AccessibleYellow else iconColor,
+                    tint = if (state.mode == AssistantMode.PROCESSING) AccessibleYellow else iconColor,
                     modifier = Modifier.size(28.dp)
                 )
             }
@@ -142,7 +143,7 @@ fun AccessibleVoiceAssistantBar(
             ) {
                 Text(
                     text = statusTitle,
-                    color = if (state.isProcessing) PureBlack else AccessibleYellow,
+                    color = if (state.mode == AssistantMode.PROCESSING) PureBlack else AccessibleYellow,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
                     maxLines = 1,
@@ -150,7 +151,7 @@ fun AccessibleVoiceAssistantBar(
                 )
                 Text(
                     text = state.feedbackMessage,
-                    color = if (state.isProcessing) PureBlack.copy(alpha = 0.85f) else Color.White.copy(alpha = 0.9f),
+                    color = if (state.mode == AssistantMode.PROCESSING) PureBlack.copy(alpha = 0.85f) else Color.White.copy(alpha = 0.9f),
                     fontSize = 12.5.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
