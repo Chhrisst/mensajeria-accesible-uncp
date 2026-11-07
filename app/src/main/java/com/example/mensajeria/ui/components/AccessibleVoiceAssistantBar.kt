@@ -21,9 +21,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -125,7 +125,7 @@ fun AccessibleVoiceAssistantBar(
                 Icon(
                     imageVector = when {
                         state.isProcessing -> Icons.Default.AutoAwesome
-                        state.isSpeaking -> Icons.Default.VolumeUp
+                        state.isSpeaking -> Icons.AutoMirrored.Filled.VolumeUp
                         else -> Icons.Default.Mic
                     },
                     contentDescription = null,
