@@ -37,6 +37,8 @@ class ChatViewModel(
     private val vibrationService = VibrationService(context)
     val soundService = com.example.mensajeria.domain.service.SoundNotificationService(context)
     var isDisabilityMode: Boolean = true
+    var currentUserId: String = ""
+    private var pollingJob: kotlinx.coroutines.Job? = null
 
     val ttsService = TextToSpeechService(context) {
         // Inicializado correctamente
@@ -154,7 +156,14 @@ class ChatViewModel(
         val textToSend = _uiState.value.pendingSpokenText
         if (textToSend.isNotBlank()) {
             vibrationService.vibrateSuccess()
-            repository.sendMessage(textToSend)
+            val contactId = _uiState.value.contact.id
+            if (currentUserId.isNotBlank() && contactId.isNotBlank()) {
+                viewModelScope.launch {
+                    repository.sendMessageRemote(currentUserId, contactId, textToSend)
+                }
+            } else {
+                repository.sendMessage(textToSend)
+            }
 
             _uiState.update {
                 it.copy(
@@ -188,7 +197,14 @@ class ChatViewModel(
      */
     fun selectSmartReply(reply: String) {
         vibrationService.vibrateSuccess()
-        repository.sendMessage(reply)
+        val contactId = _uiState.value.contact.id
+        if (currentUserId.isNotBlank() && contactId.isNotBlank()) {
+            viewModelScope.launch {
+                repository.sendMessageRemote(currentUserId, contactId, reply)
+            }
+        } else {
+            repository.sendMessage(reply)
+        }
 
         _uiState.update {
             it.copy(
@@ -222,7 +238,14 @@ class ChatViewModel(
     fun sendTextMessage(text: String) {
         if (text.isNotBlank()) {
             vibrationService.vibrateSuccess()
-            repository.sendMessage(text.trim())
+            val contactId = _uiState.value.contact.id
+            if (currentUserId.isNotBlank() && contactId.isNotBlank()) {
+                viewModelScope.launch {
+                    repository.sendMessageRemote(currentUserId, contactId, text.trim())
+                }
+            } else {
+                repository.sendMessage(text.trim())
+            }
             if (isDisabilityMode) {
                 ttsService.speak("Mensaje enviado: ${text.trim()}")
             }
@@ -234,7 +257,21 @@ class ChatViewModel(
      */
     fun sendVoiceNote(durationSeconds: Int = 4) {
         vibrationService.vibrateSuccess()
-        repository.sendMessage("Nota de voz grabada (${durationSeconds}s)", isVoiceNote = true, voiceDurationSeconds = durationSeconds)
+        val contactId = _uiState.value.contact.id
+        val content = "Nota de voz grabada (${durationSeconds}s)"
+        if (currentUserId.isNotBlank() && contactId.isNotBlank()) {
+            viewModelScope.launch {
+                repository.sendMessageRemote(
+                    currentUserId,
+                    contactId,
+                    content,
+                    isVoiceNote = true,
+                    voiceDurationSeconds = durationSeconds
+                )
+            }
+        } else {
+            repository.sendMessage(content, isVoiceNote = true, voiceDurationSeconds = durationSeconds)
+        }
         if (isDisabilityMode) {
             ttsService.speak("Nota de voz de $durationSeconds segundos enviada.")
         }
@@ -286,15 +323,52 @@ class ChatViewModel(
         }
     }
 
-    fun setContact(contact: Contact) {
+    fun setContact(contact: Contact, userId: String = "") {
         _uiState.update { it.copy(contact = contact) }
+        if (userId.isNotBlank()) {
+            currentUserId = userId
+        }
         if (isDisabilityMode) {
             ttsService.speak("Conversación abierta con ${contact.name}.")
         }
+
+        // Cargar mensajes de la base de datos
+        loadMessages()
+
+        // Iniciar refresco en segundo plano
+        startMessagesPolling()
+    }
+
+    fun loadMessages() {
+        val contactId = _uiState.value.contact.id
+        if (currentUserId.isNotBlank() && contactId.isNotBlank()) {
+            viewModelScope.launch {
+                repository.loadMessagesFromRemote(currentUserId, contactId)
+            }
+        }
+    }
+
+    private fun startMessagesPolling() {
+        pollingJob?.cancel()
+        pollingJob = viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(4000)
+                val contactId = _uiState.value.contact.id
+                if (currentUserId.isNotBlank() && contactId.isNotBlank()) {
+                    repository.loadMessagesFromRemote(currentUserId, contactId)
+                }
+            }
+        }
+    }
+
+    fun stopPolling() {
+        pollingJob?.cancel()
+        pollingJob = null
     }
 
     override fun onCleared() {
         super.onCleared()
+        stopPolling()
         speechService.destroy()
         ttsService.shutdown()
     }

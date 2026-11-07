@@ -23,6 +23,7 @@ class AuthRepository(private val context: Context? = null) {
             UserProfile(
                 id = "11111111-1111-1111-1111-111111111111",
                 name = "Christian Beteta",
+                username = "christian_beteta",
                 email = "christian@gmail.com",
                 phone = "912 345 678",
                 dni = "71234567",
@@ -36,6 +37,7 @@ class AuthRepository(private val context: Context? = null) {
             UserProfile(
                 id = "22222222-2222-2222-2222-222222222222",
                 name = "Romell Rivera",
+                username = "romell_rivera",
                 email = "romell@gmail.com",
                 phone = "987 654 321",
                 dni = "72345678",
@@ -49,6 +51,7 @@ class AuthRepository(private val context: Context? = null) {
             UserProfile(
                 id = "33333333-3333-3333-3333-333333333333",
                 name = "Miguel Retuerto",
+                username = "miguel_retuerto",
                 email = "miguel@gmail.com",
                 phone = "998 877 665",
                 dni = "73456789",
@@ -62,6 +65,7 @@ class AuthRepository(private val context: Context? = null) {
             UserProfile(
                 id = "44444444-4444-4444-4444-444444444444",
                 name = "Juan Perez García",
+                username = "juan_perez",
                 email = "juan@gmail.com",
                 phone = "987 654 321",
                 dni = "74567890",
@@ -75,6 +79,7 @@ class AuthRepository(private val context: Context? = null) {
             UserProfile(
                 id = "47bc3462-6f1c-45dc-a211-71bc7c1a8903",
                 name = "Christian",
+                username = "christian",
                 email = "christian_beteta_15@hotmail.com",
                 phone = "998292048",
                 code = "123456",
@@ -87,6 +92,7 @@ class AuthRepository(private val context: Context? = null) {
             UserProfile(
                 id = "55555555-5555-5555-5555-555555555555",
                 name = "Socio Invitado",
+                username = "socio_invitado",
                 email = "invitado@uncp.pe",
                 phone = "900 000 000",
                 code = "000",
@@ -187,7 +193,8 @@ class AuthRepository(private val context: Context? = null) {
             (effectiveTokens.isNotEmpty() && effectiveTokens.any { qTok ->
                 userTokens.any { uTok -> uTok == qTok || uTok.contains(qTok) || qTok.contains(uTok) }
             }) ||
-            // 3. Coincidencia por DNI / Teléfono / Correo / Código
+            // 3. Coincidencia por DNI / Teléfono / Correo / Código / Username
+            user.username.equals(query.trim().removePrefix("@"), ignoreCase = true) ||
             user.code == query.trim() ||
             user.dni == query.trim() ||
             user.email.lowercase() == query.trim().lowercase() ||
@@ -213,8 +220,11 @@ class AuthRepository(private val context: Context? = null) {
 
     fun registerUser(form: com.example.mensajeria.data.model.RegistrationForm): UserProfile {
         val desc = if (form.hasDisability) "Con discapacidad" else "Sin discapacidad"
+        val cleanBase = form.fullName.filter { it.isLetterOrDigit() }.lowercase().ifBlank { "usuario" }
+        val generatedUsername = "${cleanBase}_${System.currentTimeMillis().toString().takeLast(4)}"
         val newUser = UserProfile(
             name = form.fullName.ifBlank { "Nuevo Socio" },
+            username = generatedUsername,
             email = form.email,
             phone = form.phone,
             dni = form.dni,
@@ -243,6 +253,7 @@ class AuthRepository(private val context: Context? = null) {
                 val profile = UserProfile(
                     id = b.id,
                     name = b.name,
+                    username = b.username ?: "",
                     email = b.email ?: "",
                     phone = b.phone ?: "",
                     dni = b.dni ?: "",
@@ -303,6 +314,7 @@ class AuthRepository(private val context: Context? = null) {
                 val profile = UserProfile(
                     id = b.id,
                     name = b.name,
+                    username = b.username ?: "",
                     email = b.email ?: emailToSend,
                     phone = b.phone ?: "",
                     dni = b.dni ?: "",

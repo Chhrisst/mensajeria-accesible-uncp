@@ -64,6 +64,7 @@ class VoiceAssistantManager(
     var onLogout: (() -> Unit)? = null
     var getCurrentScreen: () -> String = { "CONTACTS" }
     var getCurrentUser: () -> String = { "Usuario" }
+    var getCurrentUserId: () -> String = { "" }
     var getActiveChatContact: () -> Contact? = { null }
 
     private var isDestroyed = false
@@ -208,10 +209,24 @@ class VoiceAssistantManager(
             }
 
             "ADD_CONTACT" -> {
-                val name = result.contactName ?: result.targetContact ?: "Nuevo Contacto"
-                val phone = result.contactPhone ?: ""
-                val added = chatRepository.addContact(name = name, phone = phone)
-                Log.i("VoiceAssistantManager", "Contacto agregado: ${added.name}")
+                val identifier = result.contactName ?: result.targetContact ?: ""
+                val clean = identifier.trim()
+                val currentUserId = getCurrentUserId()
+                if (clean.isNotBlank() && currentUserId.isNotBlank()) {
+                    scope.launch {
+                        val addResult = chatRepository.addContactByUsername(currentUserId, clean)
+                        if (addResult.isSuccess) {
+                            val added = addResult.getOrNull()!!
+                            ttsService.speak("Contacto @${added.username} agregado exitosamente a tu lista.")
+                        } else {
+                            val added = chatRepository.addContact(name = clean, phone = result.contactPhone ?: "")
+                            ttsService.speak("Contacto ${added.name} guardado en tu lista.")
+                        }
+                    }
+                } else {
+                    val added = chatRepository.addContact(name = clean.ifBlank { "Nuevo Contacto" }, phone = result.contactPhone ?: "")
+                    Log.i("VoiceAssistantManager", "Contacto agregado: ${added.name}")
+                }
             }
 
             "DELETE_CONTACT" -> {

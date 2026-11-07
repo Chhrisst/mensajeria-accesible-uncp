@@ -174,13 +174,21 @@ fun AccessibleContactListScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = currentUser.name,
-                    color = AccessibleYellow,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.semantics { heading() }
-                )
+                Column {
+                    Text(
+                        text = currentUser.name,
+                        color = AccessibleYellow,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.semantics { heading() }
+                    )
+                    Text(
+                        text = "@${currentUser.username.ifBlank { currentUser.name.lowercase().replace(" ", "_") }}",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
 
                 // Botón para cerrar sesión
                 Box(

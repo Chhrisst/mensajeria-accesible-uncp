@@ -64,7 +64,7 @@ object GeminiDirectClient {
             {
               "action": "OPEN_CHAT" | "LIST_CONTACTS" | "ADD_CONTACT" | "DELETE_CONTACT" | "MODIFY_CONTACT" | "SEND_MESSAGE" | "READ_MESSAGES" | "LOGOUT" | "BACK" | "HELP" | "GENERAL_REPLY",
               "targetContact": "Nombre exacto o más cercano de la lista si aplica, o null",
-              "contactName": "Nombre si se pide agregar o renombrar un contacto, o null",
+              "contactName": "Nombre o identificador único (@usuario) si se pide agregar o renombrar un contacto, o null",
               "contactPhone": "Número telefónico si se dictó al agregar, o null",
               "messageText": "Mensaje para enviar si aplica, o null",
               "spokenResponse": "Respuesta conversacional breve, cálida, sin tecnicismos ni formato markdown, lista para ser leída por voz al usuario ciego."

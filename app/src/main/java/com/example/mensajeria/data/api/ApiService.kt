@@ -20,6 +20,15 @@ interface ApiService {
     @GET("api/contacts/{userId}")
     suspend fun getContacts(@Path("userId") userId: String): Response<List<ApiContactResponse>>
 
+    @POST("api/contacts/add")
+    suspend fun addContact(@Body request: ApiAddContactRequest): Response<ApiContactResponse>
+
+    @retrofit2.http.DELETE("api/contacts/{userId}/{contactId}")
+    suspend fun deleteContact(
+        @Path("userId") userId: String,
+        @Path("contactId") contactId: String
+    ): Response<Map<String, Any>>
+
     @GET("api/messages/{userId}/{contactId}")
     suspend fun getMessages(
         @Path("userId") userId: String,

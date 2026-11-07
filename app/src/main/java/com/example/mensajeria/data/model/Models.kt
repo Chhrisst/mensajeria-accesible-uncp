@@ -21,6 +21,7 @@ data class Message(
 data class Contact(
     val id: String,
     val name: String,
+    val username: String = "",
     val description: String = "",
     val isOnline: Boolean = true
 )
@@ -55,16 +56,17 @@ data class ChatUiState(
 data class UserProfile(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
+    val username: String = "",
     val email: String = "",
     val phone: String = "",
     val dni: String = "",
     val birthDate: String = "",
     val code: String = "1234", // PIN numérico (4 dígitos)
     val sidePattern: String = "LRLR", // Patrón de toques laterales: L (Izquierda), R (Derecha) (4 toques)
-    val role: String = "Socio Activo UNCP",
-    val description: String = "",
+    val role: String = "Usuario",
+    val description: String = "Con discapacidad",
     val hasDisability: Boolean = true,
-    val visualCondition: String = "Ceguera total" // "Ceguera total", "Baja visión", "Otra condición visual"
+    val visualCondition: String = "Con discapacidad"
 )
 
 /**

@@ -209,7 +209,7 @@ fun AccessibleVoiceRegisterScreen(
                 val result = authViewModel.authRepository.registerRemote(form)
                 val newUser = result.getOrNull() ?: authViewModel.authRepository.registerUser(form)
                 authViewModel.ttsService.speak(
-                    "Registro completado exitosamente. Bienvenido ${newUser.name} a Mensajería UNCP."
+                    "Registro completado exitosamente. Tu nombre de usuario único es arroba ${newUser.username}. Compártelo para que puedan agregarte. Bienvenido ${newUser.name} a Mensajería UNCP."
                 )
                 onRegistrationSuccess(newUser)
             }

@@ -9,6 +9,7 @@ data class ApiLoginRequest(
 
 data class ApiRegisterRequest(
     @SerializedName("full_name") val fullName: String,
+    @SerializedName("username") val username: String? = null,
     @SerializedName("email") val email: String? = null,
     @SerializedName("phone") val phone: String? = null,
     @SerializedName("dni") val dni: String? = null,
@@ -19,9 +20,15 @@ data class ApiRegisterRequest(
     @SerializedName("visual_condition") val visualCondition: String = "Con discapacidad"
 )
 
+data class ApiAddContactRequest(
+    @SerializedName("user_id") val userId: String,
+    @SerializedName("contact_username") val contactUsername: String
+)
+
 data class ApiUserResponse(
     @SerializedName("id") val id: String,
     @SerializedName("name") val name: String,
+    @SerializedName("username") val username: String? = null,
     @SerializedName("email") val email: String? = null,
     @SerializedName("phone") val phone: String? = null,
     @SerializedName("dni") val dni: String? = null,
@@ -36,6 +43,7 @@ data class ApiUserResponse(
 data class ApiContactResponse(
     @SerializedName("id") val id: String,
     @SerializedName("name") val name: String,
+    @SerializedName("username") val username: String? = null,
     @SerializedName("email") val email: String,
     @SerializedName("phone") val phone: String? = null,
     @SerializedName("role") val role: String,
