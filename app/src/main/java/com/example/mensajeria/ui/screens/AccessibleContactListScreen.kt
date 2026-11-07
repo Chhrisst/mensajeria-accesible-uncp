@@ -26,6 +26,11 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
+import com.example.mensajeria.domain.service.VoiceAssistantManager
+import com.example.mensajeria.domain.service.VoiceAssistantState
+import com.example.mensajeria.ui.components.AccessibleVoiceAssistantBar
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -65,10 +70,12 @@ fun AccessibleContactListScreen(
     currentUser: UserProfile,
     contacts: List<Contact>,
     authViewModel: AuthViewModel,
+    voiceAssistantManager: VoiceAssistantManager? = null,
     onSelectContact: (Contact) -> Unit,
     onLogout: () -> Unit
 ) {
     var focusedIndex by remember { mutableIntStateOf(0) }
+    val assistantState = voiceAssistantManager?.state?.collectAsState()?.value ?: VoiceAssistantState()
 
     // Indicación ultra breve y concisa, dicha solo una vez
     LaunchedEffect(Unit) {
@@ -281,6 +288,18 @@ fun AccessibleContactListScreen(
                         }
                     }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // BARRA INTERACTIVA DEL ASISTENTE DE VOZ INTELIGENTE CON GEMINI
+            if (voiceAssistantManager != null) {
+                AccessibleVoiceAssistantBar(
+                    state = assistantState,
+                    onAssistantClick = {
+                        voiceAssistantManager.startListeningCycle(explicitPrompt = true)
+                    }
+                )
             }
         }
     }

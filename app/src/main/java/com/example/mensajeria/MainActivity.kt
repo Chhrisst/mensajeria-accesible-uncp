@@ -39,6 +39,7 @@ import com.example.mensajeria.ui.theme.PureBlack
 import com.example.mensajeria.ui.theme.MensajeriaTheme
 import com.example.mensajeria.ui.viewmodel.AuthViewModel
 import com.example.mensajeria.ui.viewmodel.ChatViewModel
+import com.example.mensajeria.domain.service.VoiceAssistantManager
 
 enum class AppFlowScreen {
     PERMISSION_CHECK,
@@ -63,8 +64,9 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var authViewModel: AuthViewModel
     private lateinit var chatViewModel: ChatViewModel
+    private lateinit var voiceAssistantManager: VoiceAssistantManager
     private val authRepository by lazy { AuthRepository(applicationContext) }
-    private val chatRepository = ChatRepository()
+    private val chatRepository by lazy { ChatRepository(applicationContext) }
 
     private var onPermissionGrantedCallback: (() -> Unit)? = null
 
@@ -81,6 +83,14 @@ class MainActivity : ComponentActivity() {
 
         authViewModel = AuthViewModel(applicationContext, authRepository)
         chatViewModel = ChatViewModel(applicationContext, chatRepository)
+        voiceAssistantManager = VoiceAssistantManager(
+            context = applicationContext,
+            chatRepository = chatRepository,
+            speechService = authViewModel.speechService,
+            ttsService = authViewModel.ttsService,
+            vibrationService = authViewModel.vibrationService,
+            soundService = authViewModel.soundService
+        )
 
         val hasAudioPermission = ContextCompat.checkSelfPermission(
             this,
@@ -99,7 +109,8 @@ class MainActivity : ComponentActivity() {
                         initialHasPermission = hasAudioPermission,
                         authViewModel = authViewModel,
                         chatViewModel = chatViewModel,
-                        contacts = chatRepository.contacts.value,
+                        voiceAssistantManager = voiceAssistantManager,
+                        chatRepository = chatRepository,
                         onRequestPermission = { callback ->
                             onPermissionGrantedCallback = callback
                             requestAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
@@ -109,6 +120,11 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        voiceAssistantManager.destroy()
+    }
 }
 
 @Composable
@@ -116,7 +132,8 @@ fun MensajeriaApp(
     initialHasPermission: Boolean,
     authViewModel: AuthViewModel,
     chatViewModel: ChatViewModel,
-    contacts: List<Contact>,
+    voiceAssistantManager: VoiceAssistantManager,
+    chatRepository: ChatRepository,
     onRequestPermission: (() -> Unit) -> Unit
 ) {
     var currentScreen by remember {
@@ -124,10 +141,44 @@ fun MensajeriaApp(
     }
 
     var isDisabilityMode by remember { mutableStateOf(true) }
+    val contacts by chatRepository.contacts.collectAsState()
     var selectedContact by remember { mutableStateOf(contacts.firstOrNull() ?: Contact("c1", "Lic. Ana Ramos")) }
     val authState by authViewModel.uiState.collectAsState()
 
     val currentUser = authState.authenticatedUser ?: authViewModel.authRepository.predefinedUsers.first()
+
+    // Sincronizar callbacks del Asistente de Voz Inteligente con el estado actual
+    androidx.compose.runtime.LaunchedEffect(currentScreen, selectedContact, currentUser) {
+        voiceAssistantManager.onOpenChat = { contact ->
+            selectedContact = contact
+            chatViewModel.setContact(contact)
+            currentScreen = AppFlowScreen.ACCESSIBLE_CHAT
+        }
+        voiceAssistantManager.onBackToContacts = {
+            currentScreen = AppFlowScreen.ACCESSIBLE_CONTACTS
+        }
+        voiceAssistantManager.onLogout = {
+            authViewModel.logout()
+            currentScreen = AppFlowScreen.ACCESSIBLE_WELCOME
+        }
+        voiceAssistantManager.getCurrentScreen = {
+            when (currentScreen) {
+                AppFlowScreen.ACCESSIBLE_CHAT -> "CHAT"
+                AppFlowScreen.ACCESSIBLE_CONTACTS -> "CONTACTS"
+                else -> "OTHER"
+            }
+        }
+        voiceAssistantManager.getCurrentUser = { currentUser.name }
+        voiceAssistantManager.getActiveChatContact = {
+            if (currentScreen == AppFlowScreen.ACCESSIBLE_CHAT) selectedContact else null
+        }
+
+        if (currentScreen == AppFlowScreen.ACCESSIBLE_CONTACTS || currentScreen == AppFlowScreen.ACCESSIBLE_CHAT) {
+            voiceAssistantManager.startListeningCycle(explicitPrompt = false)
+        } else {
+            voiceAssistantManager.stopAssistant()
+        }
+    }
 
     when (currentScreen) {
         // 0. PERMISOS
@@ -236,6 +287,7 @@ fun MensajeriaApp(
                 currentUser = currentUser,
                 contacts = contacts,
                 authViewModel = authViewModel,
+                voiceAssistantManager = voiceAssistantManager,
                 onSelectContact = { contact ->
                     selectedContact = contact
                     chatViewModel.setContact(contact)
@@ -256,6 +308,7 @@ fun MensajeriaApp(
             AccessibleChatScreen(
                 contact = selectedContact,
                 chatViewModel = chatViewModel,
+                voiceAssistantManager = voiceAssistantManager,
                 onBackToContacts = {
                     currentScreen = AppFlowScreen.ACCESSIBLE_CONTACTS
                 }

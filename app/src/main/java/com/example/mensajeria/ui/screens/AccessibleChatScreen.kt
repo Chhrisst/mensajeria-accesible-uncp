@@ -54,6 +54,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.mensajeria.data.model.Contact
 import com.example.mensajeria.data.model.VoiceState
+import com.example.mensajeria.domain.service.VoiceAssistantManager
+import com.example.mensajeria.domain.service.VoiceAssistantState
+import com.example.mensajeria.ui.components.AccessibleVoiceAssistantBar
 import com.example.mensajeria.ui.components.AccessibleBackButton
 import com.example.mensajeria.ui.components.AccessiblePrimaryButton
 import com.example.mensajeria.ui.components.MessageBubble
@@ -77,9 +80,11 @@ import kotlin.math.abs
 fun AccessibleChatScreen(
     contact: Contact,
     chatViewModel: ChatViewModel,
+    voiceAssistantManager: VoiceAssistantManager? = null,
     onBackToContacts: () -> Unit
 ) {
     val uiState by chatViewModel.uiState.collectAsState()
+    val assistantState = voiceAssistantManager?.state?.collectAsState()?.value ?: VoiceAssistantState()
     var focusedMessageIndex by remember { mutableIntStateOf(-1) }
     val listState = rememberLazyListState()
 
@@ -477,6 +482,16 @@ fun AccessibleChatScreen(
                                 fontSize = 14.sp
                             )
                         }
+                    }
+
+                    // ASISTENTE DE VOZ INTELIGENTE CON GEMINI
+                    if (voiceAssistantManager != null) {
+                        AccessibleVoiceAssistantBar(
+                            state = assistantState,
+                            onAssistantClick = {
+                                voiceAssistantManager.startListeningCycle(explicitPrompt = true)
+                            }
+                        )
                     }
                 }
             }

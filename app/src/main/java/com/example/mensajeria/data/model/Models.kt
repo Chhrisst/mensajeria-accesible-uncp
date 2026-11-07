@@ -137,4 +137,28 @@ data class LoginUiState(
     val errorMessage: String? = null
 )
 
+/**
+ * Contexto actual enviado al agente de IA Gemini para procesar comandos de voz.
+ */
+data class VoiceAssistantContext(
+    val currentScreen: String = "CONTACTS", // "CONTACTS", "CHAT"
+    val currentUserName: String = "",
+    val contacts: List<String> = emptyList(),
+    val activeChatContact: String? = null,
+    val recentMessages: List<String> = emptyList()
+)
+
+/**
+ * Resultado estructurado devuelto por la IA para ejecutar acciones accesibles.
+ */
+data class VoiceCommandResult(
+    val action: String = "GENERAL_REPLY", // "OPEN_CHAT", "LIST_CONTACTS", "ADD_CONTACT", "DELETE_CONTACT", "MODIFY_CONTACT", "SEND_MESSAGE", "READ_MESSAGES", "LOGOUT", "BACK", "HELP", "GENERAL_REPLY"
+    val targetContact: String? = null,
+    val contactName: String? = null,
+    val contactPhone: String? = null,
+    val messageText: String? = null,
+    val spokenResponse: String
+)
+
+
 
