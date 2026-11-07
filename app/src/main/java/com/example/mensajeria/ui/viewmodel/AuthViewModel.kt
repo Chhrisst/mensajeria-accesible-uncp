@@ -27,7 +27,7 @@ import kotlinx.coroutines.launch
  */
 class AuthViewModel(
     context: Context,
-    val authRepository: AuthRepository = AuthRepository()
+    val authRepository: AuthRepository = AuthRepository(context)
 ) : ViewModel() {
 
     val speechService = SpeechService(context)

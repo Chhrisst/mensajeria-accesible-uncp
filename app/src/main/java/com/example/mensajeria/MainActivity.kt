@@ -63,7 +63,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var authViewModel: AuthViewModel
     private lateinit var chatViewModel: ChatViewModel
-    private val authRepository = AuthRepository()
+    private val authRepository by lazy { AuthRepository(applicationContext) }
     private val chatRepository = ChatRepository()
 
     private var onPermissionGrantedCallback: (() -> Unit)? = null

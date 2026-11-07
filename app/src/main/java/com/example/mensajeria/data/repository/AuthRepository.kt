@@ -1,77 +1,129 @@
 package com.example.mensajeria.data.repository
 
+import android.content.Context
 import com.example.mensajeria.data.model.UserProfile
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Repositorio de autenticación y perfiles de usuario accesibles para la UNCP.
+ * Soporta persistencia permanente en SharedPreferences y búsqueda fonética tolerante.
  */
-class AuthRepository {
+class AuthRepository(private val context: Context? = null) {
 
+    companion object {
+        private const val PREFS_NAME = "uncp_auth_prefs"
+        private const val KEY_REGISTERED_USERS = "registered_users_list"
+        private var sharedContext: Context? = null
 
-    private val _users = mutableListOf(
-        UserProfile(
-            id = "u1",
-            name = "Romell Rivera",
-            email = "romell@gmail.com",
-            phone = "987 654 321",
-            dni = "72345678",
-            code = "123",
-            role = "Socio Activo UNCP",
-            description = "Socio Activo UNCP",
-            hasDisability = true,
-            visualCondition = "Baja visión"
-        ),
-        UserProfile(
-            id = "u2",
-            name = "Christian Beteta",
-            email = "christian@gmail.com",
-            phone = "912 345 678",
-            dni = "71234567",
-            code = "123",
-            role = "Socio UNCP",
-            description = "Taller de Tecnologías Adaptadas",
-            hasDisability = true,
-            visualCondition = "Baja visión"
-        ),
-        UserProfile(
-            id = "u3",
-            name = "Miguel Retuerto",
-            email = "miguel@gmail.com",
-            phone = "998 877 665",
-            dni = "73456789",
-            code = "456",
-            role = "Socio UNCP",
-            description = "Comité de Comunicaciones",
-            hasDisability = true,
-            visualCondition = "Ceguera total"
-        ),
-        UserProfile(
-            id = "u4",
-            name = "Juan Perez García",
-            email = "juan@gmail.com",
-            phone = "987 654 321",
-            dni = "74567890",
-            code = "123",
-            role = "Socio UNCP",
-            description = "Usuario Registrado",
-            hasDisability = true,
-            visualCondition = "Ceguera total"
-        ),
-        UserProfile(
-            id = "u5",
-            name = "Socio Invitado",
-            email = "invitado@uncp.pe",
-            phone = "900 000 000",
-            code = "000",
-            role = "Participante Experimental",
-            description = "Perfil de evaluación y pruebas",
-            hasDisability = true,
-            visualCondition = "Ceguera total"
+        private val _users = mutableListOf(
+            UserProfile(
+                id = "u1",
+                name = "Romell Rivera",
+                email = "romell@gmail.com",
+                phone = "987 654 321",
+                dni = "72345678",
+                code = "123",
+                sidePattern = "LRLR",
+                role = "Socio Activo UNCP",
+                description = "Socio Activo UNCP",
+                hasDisability = true,
+                visualCondition = "Baja visión"
+            ),
+            UserProfile(
+                id = "u2",
+                name = "Christian Beteta",
+                email = "christian@gmail.com",
+                phone = "912 345 678",
+                dni = "71234567",
+                code = "123",
+                sidePattern = "LRLR",
+                role = "Socio UNCP",
+                description = "Taller de Tecnologías Adaptadas",
+                hasDisability = true,
+                visualCondition = "Baja visión"
+            ),
+            UserProfile(
+                id = "u3",
+                name = "Miguel Retuerto",
+                email = "miguel@gmail.com",
+                phone = "998 877 665",
+                dni = "73456789",
+                code = "456",
+                sidePattern = "LRLR",
+                role = "Socio UNCP",
+                description = "Comité de Comunicaciones",
+                hasDisability = true,
+                visualCondition = "Ceguera total"
+            ),
+            UserProfile(
+                id = "u4",
+                name = "Juan Perez García",
+                email = "juan@gmail.com",
+                phone = "987 654 321",
+                dni = "74567890",
+                code = "123",
+                sidePattern = "LRLR",
+                role = "Socio UNCP",
+                description = "Usuario Registrado",
+                hasDisability = true,
+                visualCondition = "Ceguera total"
+            ),
+            UserProfile(
+                id = "u5",
+                name = "Socio Invitado",
+                email = "invitado@uncp.pe",
+                phone = "900 000 000",
+                code = "000",
+                sidePattern = "LRLR",
+                role = "Participante Experimental",
+                description = "Perfil de evaluación y pruebas",
+                hasDisability = true,
+                visualCondition = "Ceguera total"
+            )
         )
-    )
+    }
+
+    private val gson = Gson()
+
+    init {
+        if (context != null) {
+            sharedContext = context.applicationContext
+        }
+        loadPersistedUsers()
+    }
+
+    private fun getEffectiveContext(): Context? = context ?: sharedContext
+
+    private fun loadPersistedUsers() {
+        val ctx = getEffectiveContext() ?: return
+        try {
+            val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val json = prefs.getString(KEY_REGISTERED_USERS, null)
+            if (!json.isNullOrBlank()) {
+                val type = object : TypeToken<List<UserProfile>>() {}.type
+                val savedList: List<UserProfile> = gson.fromJson(json, type)
+                savedList.reversed().forEach { savedUser ->
+                    if (_users.none { it.id == savedUser.id || it.name.equals(savedUser.name, ignoreCase = true) }) {
+                        _users.add(0, savedUser)
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun persistUser(user: UserProfile) {
+        val ctx = getEffectiveContext() ?: return
+        try {
+            val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val customUsers = _users.filter { u -> u.id.length > 5 || !u.id.startsWith("u") }
+            val json = gson.toJson(customUsers)
+            prefs.edit().putString(KEY_REGISTERED_USERS, json).apply()
+        } catch (_: Exception) {}
+    }
 
     val predefinedUsers: List<UserProfile>
         get() = _users.toList()
@@ -83,20 +135,45 @@ class AuthRepository {
         _currentUser.value = user
     }
 
+    private fun normalizeString(text: String): String {
+        return text.trim().lowercase()
+            .replace("á", "a")
+            .replace("é", "e")
+            .replace("í", "i")
+            .replace("ó", "o")
+            .replace("ú", "u")
+            .replace("ñ", "n")
+            .replace("christian", "cristian")
+            .replace("cristhian", "cristian")
+            .replace(".", "")
+            .replace(",", "")
+    }
+
     fun findUserByQuery(query: String): UserProfile? {
-        val clean = query.trim().lowercase()
+        val cleanQuery = normalizeString(query)
+        if (cleanQuery.isBlank()) return null
+
+        val stopWords = setOf("soy", "mi", "nombre", "es", "cuenta", "de", "iniciar", "sesion", "con", "hola", "por", "favor", "el", "la", "usuario")
+        val rawTokens = cleanQuery.split(" ").map { it.trim() }.filter { it.isNotEmpty() }
+        val significantTokens = rawTokens.filter { !stopWords.contains(it) && it.length >= 3 }
+        val effectiveTokens = if (significantTokens.isNotEmpty()) significantTokens else rawTokens
+
         return _users.firstOrNull { user ->
-            val uName = user.name.lowercase()
-            uName.contains(clean) ||
-            clean.contains(uName) ||
-            (clean.contains("romell") && uName.contains("romell")) ||
-            (clean.contains("christian") && uName.contains("christian")) ||
-            (clean.contains("miguel") && uName.contains("miguel")) ||
-            (clean.contains("juan") && uName.contains("juan")) ||
-            (clean.contains("invitado") && uName.contains("invitado")) ||
-            user.code == clean ||
-            user.email.lowercase() == clean ||
-            user.phone.replace(" ", "") == clean.replace(" ", "")
+            val cleanUserName = normalizeString(user.name)
+            val userTokens = cleanUserName.split(" ").filter { it.length >= 3 }
+
+            // 1. Coincidencia directa de substring
+            cleanUserName.contains(cleanQuery) ||
+            cleanQuery.contains(cleanUserName) ||
+            // 2. Coincidencia por tokens significativos (ej: "soy cristian" -> token "cristian" coincide con "christian beteta")
+            (effectiveTokens.isNotEmpty() && effectiveTokens.any { qTok ->
+                userTokens.any { uTok -> uTok == qTok || uTok.contains(qTok) || qTok.contains(uTok) }
+            }) ||
+            // 3. Coincidencia por DNI / Teléfono / Correo / Código
+            user.code == query.trim() ||
+            user.dni == query.trim() ||
+            user.email.lowercase() == query.trim().lowercase() ||
+            user.phone.replace(" ", "") == query.replace(" ", "")
         }
     }
 
@@ -132,6 +209,7 @@ class AuthRepository {
         )
         _users.add(0, newUser)
         _currentUser.value = newUser
+        persistUser(newUser)
         return newUser
     }
 

@@ -3,6 +3,10 @@ package com.example.mensajeria.ui.viewmodel
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.mensajeria.data.api.ApiAiRefineSpeechRequest
+import com.example.mensajeria.data.api.ApiAiSummarizeRequest
+import com.example.mensajeria.data.api.GeminiDirectClient
+import com.example.mensajeria.data.api.RetrofitClient
 import com.example.mensajeria.data.model.ChatUiState
 import com.example.mensajeria.data.model.Contact
 import com.example.mensajeria.data.model.VoiceState
@@ -85,11 +89,34 @@ class ChatViewModel(
                     it.copy(
                         voiceState = VoiceState.CONFIRMING,
                         pendingSpokenText = recognizedText,
-                        feedbackMessage = "Usted dijo: \"$recognizedText\". ¿Desea enviarlo?"
+                        feedbackMessage = "Optimizando con IA..."
                     )
                 }
-                // Narrar confirmación auditiva
-                ttsService.speak("Usted dijo: $recognizedText. Presione el botón verde para enviar o el botón rojo para cancelar.")
+                ttsService.speak("Optimizando texto...")
+
+                // Perfeccionamiento y puntuación inteligente con Gemini
+                viewModelScope.launch {
+                    val refined = try {
+                        val response = RetrofitClient.api.refineSpeech(ApiAiRefineSpeechRequest(rawText = recognizedText))
+                        if (response.isSuccessful && !response.body()?.result.isNullOrBlank()) {
+                            response.body()!!.result
+                        } else {
+                            GeminiDirectClient.refineSpeech(recognizedText)
+                        }
+                    } catch (_: Exception) {
+                        GeminiDirectClient.refineSpeech(recognizedText)
+                    }
+
+                    _uiState.update {
+                        it.copy(
+                            voiceState = VoiceState.CONFIRMING,
+                            pendingSpokenText = refined,
+                            feedbackMessage = "Dijiste: \"$refined\""
+                        )
+                    }
+                    vibrationService.vibrateSuccess()
+                    ttsService.speak("Dijiste: $refined. Pulsa ambos lados para enviar o la izquierda para cancelar.")
+                }
             },
             onError = { errorMsg ->
                 vibrationService.vibrateError()
@@ -223,6 +250,39 @@ class ChatViewModel(
             ttsService.speak("$prefix: ${lastMsg.text}")
         } else {
             ttsService.speak("Aún no hay mensajes en esta conversación.")
+        }
+    }
+
+    /**
+     * Resume con IA (Google Gemini) el mensaje relevante más reciente de la conversación.
+     */
+    fun summarizeLastMessage() {
+        val lastMsg = _uiState.value.messages.lastOrNull { !it.isOutgoing }
+            ?: _uiState.value.messages.lastOrNull()
+
+        if (lastMsg == null) {
+            ttsService.speak("No hay mensajes para resumir en esta conversación.")
+            return
+        }
+
+        vibrationService.vibrateHover()
+        ttsService.speak("Generando resumen con Inteligencia Artificial...")
+
+        viewModelScope.launch {
+            val summary = try {
+                val response = RetrofitClient.api.summarizeMessage(ApiAiSummarizeRequest(text = lastMsg.text))
+                if (response.isSuccessful && !response.body()?.result.isNullOrBlank()) {
+                    response.body()!!.result
+                } else {
+                    GeminiDirectClient.summarize(lastMsg.text)
+                }
+            } catch (_: Exception) {
+                GeminiDirectClient.summarize(lastMsg.text)
+            }
+
+            soundService.playSuccessSound()
+            vibrationService.vibrateSuccess()
+            ttsService.speak("Resumen: $summary")
         }
     }
 
