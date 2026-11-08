@@ -15,7 +15,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import com.example.mensajeria.data.model.Contact
-import com.example.mensajeria.data.model.UserProfile
 import com.example.mensajeria.data.repository.AuthRepository
 import com.example.mensajeria.data.repository.ChatRepository
 import com.example.mensajeria.ui.screens.AccessibilityModeSelectionScreen
@@ -137,7 +136,7 @@ fun MensajeriaApp(
     onRequestPermission: (() -> Unit) -> Unit
 ) {
     var currentScreen by remember {
-        mutableStateOf(AppFlowScreen.INITIAL_WELCOME)
+        mutableStateOf(if (initialHasPermission) AppFlowScreen.INITIAL_WELCOME else AppFlowScreen.PERMISSION_CHECK)
     }
 
     var isDisabilityMode by remember { mutableStateOf(true) }
@@ -206,7 +205,7 @@ fun MensajeriaApp(
             )
         }
 
-        // 1. PREGUNTA DE DISCAPACIDAD ("¿Cómo deseas usar la app?")
+        // 1. Pregunta sobre modo accesible o estándar
         AppFlowScreen.DISABILITY_SELECTION -> {
             BackHandler {
                 currentScreen = AppFlowScreen.INITIAL_WELCOME
@@ -215,10 +214,10 @@ fun MensajeriaApp(
                 onSelectMode = { hasDisability ->
                     isDisabilityMode = hasDisability
                     chatViewModel.isDisabilityMode = hasDisability
-                    if (hasDisability) {
-                        currentScreen = AppFlowScreen.ACCESSIBLE_WELCOME
+                    currentScreen = if (hasDisability) {
+                        AppFlowScreen.ACCESSIBLE_WELCOME
                     } else {
-                        currentScreen = AppFlowScreen.STANDARD_LOGIN
+                        AppFlowScreen.STANDARD_LOGIN
                     }
                 },
                 onSpeakAnnouncement = { text ->
@@ -256,7 +255,7 @@ fun MensajeriaApp(
             AccessibleVoiceLoginScreen(
                 authViewModel = authViewModel,
                 onBack = { currentScreen = AppFlowScreen.ACCESSIBLE_WELCOME },
-                onLoginSuccess = { user ->
+                onLoginSuccess = { _ ->
                     currentScreen = AppFlowScreen.ACCESSIBLE_CONTACTS
                 }
             )
@@ -270,7 +269,7 @@ fun MensajeriaApp(
             AccessibleVoiceRegisterScreen(
                 authViewModel = authViewModel,
                 onBack = { currentScreen = AppFlowScreen.ACCESSIBLE_WELCOME },
-                onRegistrationSuccess = { user ->
+                onRegistrationSuccess = { _ ->
                     currentScreen = AppFlowScreen.ACCESSIBLE_CONTACTS
                 }
             )
@@ -327,7 +326,7 @@ fun MensajeriaApp(
             }
             StandardLoginScreen(
                 authViewModel = authViewModel,
-                onLoginSuccess = { user ->
+                onLoginSuccess = { _ ->
                     currentScreen = AppFlowScreen.STANDARD_CONTACTS
                 },
                 onGoToRegister = {
@@ -349,7 +348,7 @@ fun MensajeriaApp(
                 onBackToLogin = {
                     currentScreen = AppFlowScreen.STANDARD_LOGIN
                 },
-                onRegistrationSuccess = { user ->
+                onRegistrationSuccess = { _ ->
                     currentScreen = AppFlowScreen.STANDARD_CONTACTS
                 }
             )
