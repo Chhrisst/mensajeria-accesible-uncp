@@ -268,9 +268,9 @@ fun RegisterStep1PersonalScreen(
     onBackClick: () -> Unit,
     onNext: (String, String, String) -> Unit
 ) {
-    var fullName by remember { mutableStateOf(initialName.ifBlank { "Juan Perez García" }) }
-    var dni by remember { mutableStateOf(initialDni.ifBlank { "74567890" }) }
-    var birthDate by remember { mutableStateOf(initialBirthDate.ifBlank { "15/08/1995" }) }
+    var fullName by remember { mutableStateOf(initialName) }
+    var dni by remember { mutableStateOf(initialDni) }
+    var birthDate by remember { mutableStateOf(initialBirthDate) }
 
     Column(
         modifier = Modifier
@@ -682,19 +682,19 @@ fun RegisterStep4SummaryScreen(
                     SummaryRow(
                         icon = Icons.Default.Person,
                         label = "Nombre completo",
-                        value = form.fullName.ifBlank { "Juan Perez García" }
+                        value = form.fullName.ifBlank { "No especificado" }
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     SummaryRow(
                         icon = Icons.Default.Phone,
                         label = "Celular",
-                        value = form.phone.ifBlank { "987 654 321" }
+                        value = form.phone.ifBlank { "No especificado" }
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     SummaryRow(
                         icon = Icons.Default.Email,
                         label = "Correo electrónico",
-                        value = form.email.ifBlank { "juan@gmail.com" }
+                        value = form.email.ifBlank { "No especificado" }
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     SummaryRow(

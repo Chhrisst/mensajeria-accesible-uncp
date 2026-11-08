@@ -41,7 +41,7 @@ enum class VoiceState {
  * Estado UI global reactivo para la pantalla de chat (MVVM UDF).
  */
 data class ChatUiState(
-    val contact: Contact = Contact("c1", "Contacto de Prueba"),
+    val contact: Contact = Contact(id = "", name = "", username = ""),
     val messages: List<Message> = emptyList(),
     val voiceState: VoiceState = VoiceState.IDLE,
     val pendingSpokenText: String = "",

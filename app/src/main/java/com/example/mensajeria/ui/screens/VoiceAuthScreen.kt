@@ -80,12 +80,12 @@ fun VoiceAuthScreen(
             }
             VoiceAuthPhase.ACCOUNT_DETECTED -> {
                 VoiceAccountDetectedScreen(
-                    user = state.detectedUser ?: authViewModel.authRepository.predefinedUsers.first()
+                    user = state.detectedUser ?: UserProfile(name = "Usuario")
                 )
             }
             VoiceAuthPhase.LISTENING_PIN -> {
                 VoicePinScreen(
-                    user = state.detectedUser ?: authViewModel.authRepository.predefinedUsers.first(),
+                    user = state.detectedUser ?: UserProfile(name = "Usuario"),
                     enteredPin = state.enteredPin,
                     onDigitClick = { authViewModel.addPinDigit(it) },
                     onRepeatClick = { authViewModel.clearPin() },
@@ -107,7 +107,7 @@ fun VoiceAuthScreen(
             }
             VoiceAuthPhase.SUCCESS -> {
                 VoiceSuccessScreen(
-                    user = state.detectedUser ?: authViewModel.authRepository.predefinedUsers.first(),
+                    user = state.detectedUser ?: UserProfile(name = "Usuario"),
                     onGoToInbox = {
                         state.detectedUser?.let { onSuccessGoToInbox(it) }
                     }
@@ -486,7 +486,7 @@ fun VoiceActiveScreenPreview() {
 fun VoiceAccountDetectedScreenPreview() {
     MensajeriaTheme {
         VoiceAccountDetectedScreen(
-            user = UserProfile(id = "1", name = "Romell Rivera", role = "Socio Activo UNCP")
+            user = UserProfile(id = "1", name = "Usuario Demo", role = "Usuario")
         )
     }
 }
@@ -496,7 +496,7 @@ fun VoiceAccountDetectedScreenPreview() {
 fun VoicePinScreenPreview() {
     MensajeriaTheme {
         VoicePinScreen(
-            user = UserProfile(id = "1", name = "Romell Rivera", role = "Socio Activo UNCP"),
+            user = UserProfile(id = "1", name = "Usuario Demo", role = "Usuario"),
             enteredPin = "12",
             onDigitClick = {},
             onRepeatClick = {},
@@ -523,7 +523,7 @@ fun VoiceErrorScreenPreview() {
 fun VoiceSuccessScreenPreview() {
     MensajeriaTheme {
         VoiceSuccessScreen(
-            user = UserProfile(id = "1", name = "Romell Rivera", role = "Socio Activo UNCP"),
+            user = UserProfile(id = "1", name = "Usuario Demo", role = "Usuario"),
             onGoToInbox = {}
         )
     }

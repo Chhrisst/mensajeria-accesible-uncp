@@ -15,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import com.example.mensajeria.data.model.Contact
+import com.example.mensajeria.data.model.UserProfile
 import com.example.mensajeria.data.repository.AuthRepository
 import com.example.mensajeria.data.repository.ChatRepository
 import com.example.mensajeria.ui.screens.AccessibilityModeSelectionScreen
@@ -141,10 +142,10 @@ fun MensajeriaApp(
 
     var isDisabilityMode by remember { mutableStateOf(true) }
     val contacts by chatRepository.contacts.collectAsState()
-    var selectedContact by remember { mutableStateOf(contacts.firstOrNull() ?: Contact("22222222-2222-2222-2222-222222222222", "Romell Rivera", description = "Con discapacidad")) }
+    var selectedContact by remember { mutableStateOf(contacts.firstOrNull() ?: Contact(id = "", name = "", username = "", description = "")) }
     val authState by authViewModel.uiState.collectAsState()
 
-    val currentUser = authState.authenticatedUser ?: authViewModel.authRepository.predefinedUsers.first()
+    val currentUser = authState.authenticatedUser ?: UserProfile(id = "", name = "Usuario", username = "")
 
     // Sincronizar callbacks del Asistente de Voz Inteligente con el estado actual
     androidx.compose.runtime.LaunchedEffect(currentScreen, selectedContact, currentUser) {

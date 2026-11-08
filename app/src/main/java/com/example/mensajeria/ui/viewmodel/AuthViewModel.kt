@@ -217,8 +217,12 @@ class AuthViewModel(
             _voiceAuthState.update { it.copy(enteredPin = newPin) }
 
             if (newPin.length == 4) {
-                val user = _voiceAuthState.value.detectedUser ?: authRepository.predefinedUsers.first()
-                validatePin(user, newPin)
+                val user = _voiceAuthState.value.detectedUser
+                if (user != null) {
+                    validatePin(user, newPin)
+                } else {
+                    triggerVoiceError("Por favor, identifícate diciendo tu nombre primero.")
+                }
             }
         }
     }

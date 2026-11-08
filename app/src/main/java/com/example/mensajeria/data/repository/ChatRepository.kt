@@ -25,43 +25,12 @@ class ChatRepository(private val context: Context? = null) {
     companion object {
         private const val PREFS_NAME = "uncp_chat_prefs"
         private var sharedContext: Context? = null
-
-        private val defaultContacts = listOf(
-            Contact(
-                id = "22222222-2222-2222-2222-222222222222",
-                name = "Romell Rivera",
-                username = "romell_rivera",
-                description = "Con discapacidad",
-                isOnline = true
-            ),
-            Contact(
-                id = "33333333-3333-3333-3333-333333333333",
-                name = "Miguel Retuerto",
-                username = "miguel_retuerto",
-                description = "Con discapacidad",
-                isOnline = true
-            ),
-            Contact(
-                id = "11111111-1111-1111-1111-111111111111",
-                name = "Christian Beteta",
-                username = "christian_beteta",
-                description = "Con discapacidad",
-                isOnline = true
-            ),
-            Contact(
-                id = "44444444-4444-4444-4444-444444444444",
-                name = "Juan Perez García",
-                username = "juan_perez",
-                description = "Con discapacidad",
-                isOnline = true
-            )
-        )
     }
 
     private val gson = Gson()
     private var currentActiveUserId: String = ""
 
-    private val _contacts = MutableStateFlow<List<Contact>>(defaultContacts)
+    private val _contacts = MutableStateFlow<List<Contact>>(emptyList())
     val contacts: StateFlow<List<Contact>> = _contacts.asStateFlow()
 
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
