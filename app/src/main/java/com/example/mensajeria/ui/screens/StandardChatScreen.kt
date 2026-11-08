@@ -125,17 +125,6 @@ fun StandardChatScreen(
                         fontSize = 12.sp
                     )
                 }
-
-                // Botón para simular mensaje entrante y verificar sonido agradable de notificación
-                IconButton(onClick = {
-                    chatViewModel.simulateIncomingMessage("Hola, ¿cómo estás? Te escribo para coordinar.")
-                }) {
-                    Icon(
-                        imageVector = Icons.Default.NotificationsActive,
-                        contentDescription = "Simular mensaje entrante",
-                        tint = whatsappGreen
-                    )
-                }
             }
         }
 

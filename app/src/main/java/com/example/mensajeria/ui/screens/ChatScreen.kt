@@ -1,4 +1,4 @@
-﻿package com.example.mensajeria.ui.screens
+package com.example.mensajeria.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -105,21 +105,6 @@ fun ChatScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 12.dp)
         ) {
-
-            // Botón de prueba para simular llegada de mensaje (útil para experimentación y sustentación)
-            AccessibleButton(
-                text = "📩 Simular mensaje entrante",
-                contentDescription = "Simular la llegada de un mensaje entrante de la UNCP",
-                onClick = {
-                    viewModel.simulateIncomingMessage("¿A qué hora puedes venir hoy a la UNCP para coordinar la práctica?")
-                },
-                backgroundColor = SurfaceVariantDark,
-                textColor = HighContrastYellow,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-            )
-
             // Lista de mensajes (LazyColumn)
             LazyColumn(
                 state = listState,

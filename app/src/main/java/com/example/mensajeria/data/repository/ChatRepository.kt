@@ -319,13 +319,4 @@ class ChatRepository(private val context: Context? = null) {
         )
         _messages.update { it + newMessage }
     }
-
-    fun receiveMessage(text: String, senderName: String = "Contacto") {
-        val incoming = Message(
-            text = text,
-            isOutgoing = false,
-            senderName = senderName
-        )
-        _messages.update { it + incoming }
-    }
 }

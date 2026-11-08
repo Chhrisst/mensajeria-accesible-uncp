@@ -217,22 +217,6 @@ class ChatViewModel(
     }
 
     /**
-     * Simula la recepción de un nuevo mensaje con sonido agradable de notificación.
-     */
-    fun simulateIncomingMessage(text: String) {
-        soundService.playMessageReceivedSound()
-        vibrationService.vibrateSuccess()
-        repository.receiveMessage(text, _uiState.value.contact.name)
-        val replies = smartReplyService.generateReplies(text)
-        _uiState.update { it.copy(smartReplies = replies) }
-
-        if (isDisabilityMode) {
-            val announce = "Nuevo mensaje de ${_uiState.value.contact.name}: $text."
-            ttsService.speak(announce)
-        }
-    }
-
-    /**
      * Enviar mensaje de texto común (modo estándar WhatsApp).
      */
     fun sendTextMessage(text: String) {

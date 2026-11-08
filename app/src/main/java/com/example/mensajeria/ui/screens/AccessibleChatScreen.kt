@@ -203,30 +203,6 @@ fun AccessibleChatScreen(
                         fontSize = 13.sp
                     )
                 }
-
-                // Botón simulador de mensaje entrante accesible
-                Box(
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(CircleShape)
-                        .background(DarkCardBackground)
-                        .border(1.5.dp, AccessibleYellow.copy(alpha = 0.5f), CircleShape)
-                        .clickable {
-                            chatViewModel.simulateIncomingMessage("Estimado socio, la asamblea general de la UNCP será este viernes a las 4 pm en el auditorio. Por favor confirme su asistencia.")
-                        }
-                        .semantics {
-                            this.role = Role.Button
-                            this.contentDescription = "Simular mensaje recibido para probar resumen con Inteligencia Artificial."
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.NotificationsActive,
-                        contentDescription = null,
-                        tint = AccessibleYellow,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
