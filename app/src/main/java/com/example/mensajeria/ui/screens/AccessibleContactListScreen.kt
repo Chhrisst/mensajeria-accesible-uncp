@@ -31,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import com.example.mensajeria.domain.service.VoiceAssistantManager
 import com.example.mensajeria.domain.service.VoiceAssistantState
 import com.example.mensajeria.ui.components.AccessibleVoiceAssistantBar
+import com.example.mensajeria.ui.components.exploreTarget
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -148,13 +149,6 @@ fun AccessibleContactListScreen(
                                 lastRightTouch = 0L
                                 change.consume()
                                 confirmSelection()
-                            } else {
-                                // Exploración táctil por deslizamiento vertical
-                                val headerOffset = 80.dp.toPx()
-                                val availableHeight = (height - headerOffset).coerceAtLeast(1f)
-                                val itemHeight = availableHeight / contacts.size.coerceAtLeast(1)
-                                val index = ((y - headerOffset) / itemHeight).toInt().coerceIn(0, contacts.size - 1)
-                                focusContact(index)
                             }
                         }
                     }
@@ -174,7 +168,12 @@ fun AccessibleContactListScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(
+                    modifier = Modifier.exploreTarget(
+                        id = "user_header",
+                        label = "Usuario ${currentUser.name}"
+                    )
+                ) {
                     Text(
                         text = currentUser.name,
                         color = AccessibleYellow,
@@ -194,6 +193,7 @@ fun AccessibleContactListScreen(
                 Box(
                     modifier = Modifier
                         .size(46.dp)
+                        .exploreTarget(id = "logout_btn", label = "Cerrar sesión")
                         .clip(CircleShape)
                         .background(DarkCardBackground)
                         .border(1.5.dp, AccessibleYellow.copy(alpha = 0.6f), CircleShape)
@@ -227,20 +227,50 @@ fun AccessibleContactListScreen(
                     .weight(1f),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                contacts.forEachIndexed { index, contact ->
-                    val isFocused = index == focusedIndex
+                if (contacts.isEmpty()) {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
-                            .clickable {
-                                focusContact(index)
-                                confirmSelection()
-                            }
-                            .semantics {
-                                this.role = Role.Button
-                                this.contentDescription = contact.name
-                            },
+                            .exploreTarget(id = "empty_contacts_card", label = "Sin contactos"),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = DarkCardBackground),
+                        border = BorderStroke(2.dp, AccessibleYellow.copy(alpha = 0.5f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Aún no tienes contactos.\nUsa el Asistente de Voz para agregar contactos por su usuario.",
+                                color = Color.White,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                } else {
+                    contacts.forEachIndexed { index, contact ->
+                        val isFocused = index == focusedIndex
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .exploreTarget(
+                                    id = "contact_${contact.id}_$index",
+                                    label = contact.name,
+                                    onHover = { focusedIndex = index }
+                                )
+                                .clickable {
+                                    focusContact(index)
+                                    confirmSelection()
+                                }
+                                .semantics {
+                                    this.role = Role.Button
+                                    this.contentDescription = contact.name
+                                },
                         shape = RoundedCornerShape(18.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = if (isFocused) AccessibleYellow else DarkCardBackground
@@ -294,6 +324,7 @@ fun AccessibleContactListScreen(
                                 )
                             }
                         }
+                    }
                     }
                 }
             }

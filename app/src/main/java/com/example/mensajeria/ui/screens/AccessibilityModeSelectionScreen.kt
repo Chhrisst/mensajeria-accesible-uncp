@@ -40,6 +40,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import com.example.mensajeria.ui.components.exploreTarget
 import com.example.mensajeria.ui.components.playAccessibleClickFeedback
 import com.example.mensajeria.ui.theme.AccessibleYellow
 import com.example.mensajeria.ui.theme.DarkCardBackground
@@ -107,6 +108,7 @@ fun AccessibilityModeSelectionScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
+                        .exploreTarget(id = "mode_accessible", label = "Modo accesible")
                         .clickable {
                             playAccessibleClickFeedback(context)
                             onSelectMode(true)
@@ -206,6 +208,7 @@ fun AccessibilityModeSelectionScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
+                        .exploreTarget(id = "mode_standard", label = "Modo estándar")
                         .clickable {
                             playAccessibleClickFeedback(context)
                             onSelectMode(false)

@@ -51,6 +51,7 @@ import com.example.mensajeria.ui.components.AccessibleBackButton
 import com.example.mensajeria.ui.components.AccessibleOutlinedButton
 import com.example.mensajeria.ui.components.PinDotIndicator
 import com.example.mensajeria.ui.components.VoiceAssistantLogo
+import com.example.mensajeria.ui.components.exploreTarget
 import com.example.mensajeria.ui.theme.AccessibleYellow
 import com.example.mensajeria.ui.theme.DarkCardBackground
 import com.example.mensajeria.ui.theme.PureBlack
@@ -108,7 +109,7 @@ fun AccessibleVoiceRegisterScreen(
                                 registeredName = recognizedName
                                 feedbackText = "Nombre recibido: $recognizedName"
                                 authViewModel.ttsService.speak(
-                                    "Nombre recibido: $recognizedName. Ahora crea tu clave secreta de cuatro toques: toca el lado izquierdo o derecho cuatro veces de manera discreta."
+                                    "Nombre recibido: $recognizedName. Pulsa de izquierda a derecha cuatro veces para crear una combinación única."
                                 )
                             },
                             onError = { error ->
@@ -153,7 +154,7 @@ fun AccessibleVoiceRegisterScreen(
                             registeredName = recognizedName
                             feedbackText = "Nombre recibido: $recognizedName"
                             authViewModel.ttsService.speak(
-                                "Nombre recibido: $recognizedName. Ahora crea tu clave secreta de cuatro toques: toca el lado izquierdo o derecho cuatro veces de manera discreta."
+                                "Nombre recibido: $recognizedName. Pulsa de izquierda a derecha cuatro veces para crear una combinación única."
                             )
                         },
                         onError = { error ->
@@ -324,18 +325,9 @@ fun AccessibleVoiceRegisterScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Crea tu clave tocando 4 veces los lados",
+                        text = "Pulsa de izquierda a derecha 4 veces para crear una combinación única",
                         fontSize = 15.sp,
                         color = TextSecondaryGray,
-                        textAlign = TextAlign.Center
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Text(
-                        text = "Pulsaciones ocultas por seguridad (solo vibración)",
-                        fontSize = 12.sp,
-                        color = Color(0xFF8E8E93),
                         textAlign = TextAlign.Center
                     )
 
@@ -359,10 +351,11 @@ fun AccessibleVoiceRegisterScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
+                                .exploreTarget(id = "reg_side_left", label = "Lado izquierdo")
                                 .clickable { handleSideTap('L') }
                                 .semantics {
                                     this.role = Role.Button
-                                    this.contentDescription = "Toque Lado Izquierdo."
+                                    this.contentDescription = "Lado izquierdo"
                                 },
                             shape = RoundedCornerShape(22.dp),
                             colors = CardDefaults.cardColors(containerColor = DarkCardBackground),
@@ -396,10 +389,11 @@ fun AccessibleVoiceRegisterScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
+                                .exploreTarget(id = "reg_side_right", label = "Lado derecho")
                                 .clickable { handleSideTap('R') }
                                 .semantics {
                                     this.role = Role.Button
-                                    this.contentDescription = "Toque Lado Derecho."
+                                    this.contentDescription = "Lado derecho"
                                 },
                             shape = RoundedCornerShape(22.dp),
                             colors = CardDefaults.cardColors(containerColor = DarkCardBackground),

@@ -111,6 +111,7 @@ fun VoiceAssistantLogo(
         modifier = modifier
             .size(size)
             .scale(scale)
+            .exploreTarget(id = "voice_assistant_logo", label = "Micrófono")
             .then(
                 if (onClick != null) {
                     Modifier
@@ -174,12 +175,14 @@ fun VoiceAssistantLogo(
 @Composable
 fun AccessibleBackButton(
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    exploreLabel: String = "Volver"
 ) {
     val context = LocalContext.current
     Box(
         modifier = modifier
             .size(48.dp)
+            .exploreTarget(id = "back_btn_$exploreLabel", label = exploreLabel)
             .clip(CircleShape)
             .background(Color(0xFF1C1C1E))
             .clickable {
@@ -188,7 +191,7 @@ fun AccessibleBackButton(
             }
             .semantics {
                 this.role = Role.Button
-                this.contentDescription = "Volver a la pantalla anterior"
+                this.contentDescription = exploreLabel
             },
         contentAlignment = Alignment.Center
     ) {
@@ -293,6 +296,7 @@ fun AccessiblePrimaryButton(
         modifier = modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = 56.dp)
+            .exploreTarget(id = "primary_btn_$text", label = text)
             .semantics {
                 this.role = Role.Button
                 this.contentDescription = text
@@ -342,6 +346,7 @@ fun AccessibleOutlinedButton(
         modifier = modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = 56.dp)
+            .exploreTarget(id = "primary_btn_$text", label = text)
             .semantics {
                 this.role = Role.Button
                 this.contentDescription = text
@@ -392,6 +397,7 @@ fun AccessibleOptionCard(
         modifier = modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = 72.dp)
+            .exploreTarget(id = "option_card_$title", label = title)
             .clickable {
                 playAccessibleClickFeedback(context)
                 onClick()

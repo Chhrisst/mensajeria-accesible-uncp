@@ -51,6 +51,7 @@ import com.example.mensajeria.ui.components.AccessibleBackButton
 import com.example.mensajeria.ui.components.AccessibleOutlinedButton
 import com.example.mensajeria.ui.components.PinDotIndicator
 import com.example.mensajeria.ui.components.VoiceAssistantLogo
+import com.example.mensajeria.ui.components.exploreTarget
 import com.example.mensajeria.ui.theme.AccessibleYellow
 import com.example.mensajeria.ui.theme.DarkCardBackground
 import com.example.mensajeria.ui.theme.PureBlack
@@ -150,7 +151,7 @@ fun AccessibleVoiceLoginScreen(
             isListeningName = false
             feedbackText = "Cuenta detectada: ${detectedUser?.name}."
             authViewModel.ttsService.speak(
-                "Cuenta detectada: ${detectedUser?.name}. Ahora ingresa tu clave secreta de cuatro toques tocando los lados de la pantalla de forma discreta."
+                "Cuenta detectada: ${detectedUser?.name}. Pulsa de izquierda a derecha cuatro veces para ingresar tu combinación."
             )
         }
     }
@@ -298,19 +299,10 @@ fun AccessibleVoiceLoginScreen(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "Ingresa tu clave de 4 toques",
-                        fontSize = 22.sp,
+                        text = "Pulsa de izquierda a derecha 4 veces para ingresar tu combinación",
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = AccessibleYellow,
-                        textAlign = TextAlign.Center
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Text(
-                        text = "Pulsaciones ocultas por seguridad (solo vibración)",
-                        fontSize = 12.sp,
-                        color = Color(0xFF8E8E93),
                         textAlign = TextAlign.Center
                     )
 
@@ -336,10 +328,11 @@ fun AccessibleVoiceLoginScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
+                                .exploreTarget(id = "login_side_left", label = "Lado izquierdo")
                                 .clickable { handleSideTap('L') }
                                 .semantics {
                                     this.role = Role.Button
-                                    this.contentDescription = "Toque Lado Izquierdo."
+                                    this.contentDescription = "Lado izquierdo"
                                 },
                             shape = RoundedCornerShape(22.dp),
                             colors = CardDefaults.cardColors(containerColor = DarkCardBackground),
@@ -373,10 +366,11 @@ fun AccessibleVoiceLoginScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
+                                .exploreTarget(id = "login_side_right", label = "Lado derecho")
                                 .clickable { handleSideTap('R') }
                                 .semantics {
                                     this.role = Role.Button
-                                    this.contentDescription = "Toque Lado Derecho."
+                                    this.contentDescription = "Lado derecho"
                                 },
                             shape = RoundedCornerShape(22.dp),
                             colors = CardDefaults.cardColors(containerColor = DarkCardBackground),

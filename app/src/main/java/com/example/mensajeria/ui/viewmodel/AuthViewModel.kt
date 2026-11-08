@@ -39,8 +39,16 @@ class AuthViewModel(
     }
 
     // Estado de login general
-    private val _uiState = MutableStateFlow(LoginUiState())
+    private val _uiState = MutableStateFlow(LoginUiState(authenticatedUser = authRepository.currentUser.value))
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            authRepository.currentUser.collect { user ->
+                _uiState.update { it.copy(authenticatedUser = user) }
+            }
+        }
+    }
 
     // Estado del flujo de autenticación por voz (Figma Canvas.png & Canvas-1.png)
     private val _voiceAuthState = MutableStateFlow(VoiceAuthState())
@@ -160,18 +168,14 @@ class AuthViewModel(
             it.copy(
                 phase = VoiceAuthPhase.ACCOUNT_DETECTED,
                 detectedUser = found,
-                feedbackMessage = "Cuenta detectada: ${found.name}. Escuchando PIN..."
+                feedbackMessage = "Cuenta detectada: ${found.name}."
             )
         }
-        ttsService.speak("Cuenta detectada: ${found.name}. Escuchando PIN de cuatro dígitos.", onDone = {
-            // Iniciar escucha del PIN
-            startListeningForPin(found)
-        })
     }
 
     /**
      * Paso 3: Ingreso y Confirmación Segura del PIN
-     * Muestra los 4 puntos amarillos interactivos (● ● ● ●) de forma discreta
+     * Muestra los 4 puntos amarillos interactivos (● ● ● ●)
      */
     fun startListeningForPin(user: UserProfile) {
         _voiceAuthState.update {
@@ -188,8 +192,7 @@ class AuthViewModel(
                 processPinInput(user, recognizedPinText)
             },
             onError = {
-                // Si hubo tiempo de espera, permitir ingresar por toques o reintentar
-                ttsService.speak("No se escuchó el PIN. Puede tocar la pantalla para ingresar los dígitos de forma discreta o pulsar Ayuda.")
+                ttsService.speak("No se escuchó el PIN. Puede tocar la pantalla para ingresar los dígitos o pulsar Ayuda.")
             }
         )
     }

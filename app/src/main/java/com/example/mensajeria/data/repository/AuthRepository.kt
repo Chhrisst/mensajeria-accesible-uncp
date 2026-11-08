@@ -17,20 +17,51 @@ class AuthRepository(private val context: Context? = null) {
     companion object {
         private const val PREFS_NAME = "uncp_auth_prefs"
         private const val KEY_REGISTERED_USERS = "registered_users_list"
+        private const val KEY_ACTIVE_USER = "active_session_user"
         private var sharedContext: Context? = null
         private val _users = mutableListOf<UserProfile>()
     }
 
     private val gson = Gson()
 
+    private val _currentUser = MutableStateFlow<UserProfile?>(null)
+    val currentUser: StateFlow<UserProfile?> = _currentUser.asStateFlow()
+
     init {
         if (context != null) {
             sharedContext = context.applicationContext
         }
         loadPersistedUsers()
+        loadActiveSession()
     }
 
     private fun getEffectiveContext(): Context? = context ?: sharedContext
+
+    private fun loadActiveSession() {
+        val ctx = getEffectiveContext() ?: return
+        try {
+            val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val json = prefs.getString(KEY_ACTIVE_USER, null)
+            if (!json.isNullOrBlank()) {
+                val savedUser = gson.fromJson(json, UserProfile::class.java)
+                if (savedUser != null && savedUser.id.isNotBlank()) {
+                    _currentUser.value = savedUser
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun saveActiveSession(user: UserProfile?) {
+        val ctx = getEffectiveContext() ?: return
+        try {
+            val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            if (user == null || user.id.isBlank()) {
+                prefs.edit().remove(KEY_ACTIVE_USER).apply()
+            } else {
+                prefs.edit().putString(KEY_ACTIVE_USER, gson.toJson(user)).apply()
+            }
+        } catch (_: Exception) {}
+    }
 
     private fun loadPersistedUsers() {
         val ctx = getEffectiveContext() ?: return
@@ -68,11 +99,9 @@ class AuthRepository(private val context: Context? = null) {
     val predefinedUsers: List<UserProfile>
         get() = _users.toList()
 
-    private val _currentUser = MutableStateFlow<UserProfile?>(null)
-    val currentUser: StateFlow<UserProfile?> = _currentUser.asStateFlow()
-
     fun loginWithProfile(user: UserProfile) {
         _currentUser.value = user
+        saveActiveSession(user)
     }
 
     private fun normalizeString(text: String): String {
@@ -130,6 +159,7 @@ class AuthRepository(private val context: Context? = null) {
         val found = findUserByQuery(input)
         if (found != null) {
             _currentUser.value = found
+            saveActiveSession(found)
         }
         return found
     }
@@ -155,6 +185,7 @@ class AuthRepository(private val context: Context? = null) {
         _users.add(0, newUser)
         _currentUser.value = newUser
         persistUser(newUser)
+        saveActiveSession(newUser)
         return newUser
     }
 
@@ -182,11 +213,13 @@ class AuthRepository(private val context: Context? = null) {
                 )
                 _currentUser.value = profile
                 persistUser(profile)
+                saveActiveSession(profile)
                 Result.success(profile)
             } else {
                 val localUser = findUserByQuery(query)
                 if (localUser != null && (passwordOrPin.isBlank() || verifyPin(localUser, passwordOrPin))) {
                     _currentUser.value = localUser
+                    saveActiveSession(localUser)
                     Result.success(localUser)
                 } else {
                     Result.failure(Exception("Credenciales inválidas."))
@@ -196,6 +229,7 @@ class AuthRepository(private val context: Context? = null) {
             val localUser = findUserByQuery(query)
             if (localUser != null && (passwordOrPin.isBlank() || verifyPin(localUser, passwordOrPin))) {
                 _currentUser.value = localUser
+                saveActiveSession(localUser)
                 Result.success(localUser)
             } else {
                 Result.failure(e)
@@ -244,6 +278,7 @@ class AuthRepository(private val context: Context? = null) {
                 _users.add(0, profile)
                 _currentUser.value = profile
                 persistUser(profile)
+                saveActiveSession(profile)
                 Result.success(profile)
             } else {
                 val local = registerUser(form)
@@ -257,6 +292,7 @@ class AuthRepository(private val context: Context? = null) {
 
     fun logout() {
         _currentUser.value = null
+        saveActiveSession(null)
     }
 }
 

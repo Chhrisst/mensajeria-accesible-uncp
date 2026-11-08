@@ -60,6 +60,7 @@ import com.example.mensajeria.ui.components.AccessibleVoiceAssistantBar
 import com.example.mensajeria.ui.components.AccessibleBackButton
 import com.example.mensajeria.ui.components.AccessiblePrimaryButton
 import com.example.mensajeria.ui.components.MessageBubble
+import com.example.mensajeria.ui.components.exploreTarget
 import com.example.mensajeria.ui.theme.AccessibleYellow
 import com.example.mensajeria.ui.theme.DarkCardBackground
 import com.example.mensajeria.ui.theme.PureBlack
@@ -184,12 +185,17 @@ fun AccessibleChatScreen(
                         chatViewModel.ttsService.speak("Saliendo de la conversación.")
                         onBackToContacts()
                     },
-                    modifier = Modifier.size(50.dp)
+                    modifier = Modifier.size(50.dp),
+                    exploreLabel = "Salir del chat"
                 )
 
                 Spacer(modifier = Modifier.size(14.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .exploreTarget(id = "chat_contact_header", label = contact.name)
+                ) {
                     Text(
                         text = contact.name,
                         color = AccessibleYellow,
@@ -219,9 +225,15 @@ fun AccessibleChatScreen(
                 itemsIndexed(uiState.messages.reversed()) { index, message ->
                     val actualIndex = uiState.messages.size - 1 - index
                     val isFocused = actualIndex == focusedMessageIndex
+                    val speaker = if (message.isOutgoing) "Tú" else contact.name
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .exploreTarget(
+                                id = "chat_msg_${message.id}_$actualIndex",
+                                label = "$speaker: ${message.text}",
+                                onHover = { focusedMessageIndex = actualIndex }
+                            )
                             .clickable {
                                 focusMessage(actualIndex)
                             }
@@ -276,6 +288,7 @@ fun AccessibleChatScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(56.dp)
+                                    .exploreTarget(id = "chat_confirm_cancel", label = "Cancelar")
                                     .clickable { chatViewModel.cancelPendingMessage() },
                                 shape = RoundedCornerShape(14.dp),
                                 colors = CardDefaults.cardColors(containerColor = PureBlack),
@@ -297,6 +310,7 @@ fun AccessibleChatScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(56.dp)
+                                    .exploreTarget(id = "chat_confirm_send", label = "Enviar")
                                     .clickable { chatViewModel.confirmAndSendMessage() },
                                 shape = RoundedCornerShape(14.dp),
                                 colors = CardDefaults.cardColors(containerColor = PureBlack),
@@ -330,6 +344,7 @@ fun AccessibleChatScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(72.dp)
+                                .exploreTarget(id = "chat_dictate_btn", label = "Dictar mensaje")
                                 .clickable {
                                     chatViewModel.soundService.playButtonClickSound()
                                     chatViewModel.ttsService.speak("Iniciando dictado. Habla después del tono.")
@@ -380,6 +395,7 @@ fun AccessibleChatScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(72.dp)
+                                .exploreTarget(id = "chat_summary_btn", label = "Resumen IA")
                                 .clickable {
                                     chatViewModel.soundService.playButtonClickSound()
                                     chatViewModel.summarizeLastMessage()
@@ -428,6 +444,7 @@ fun AccessibleChatScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp)
+                            .exploreTarget(id = "chat_repeat_btn", label = "Último mensaje")
                             .clickable {
                                 chatViewModel.soundService.playButtonClickSound()
                                 chatViewModel.repeatLastMessage()

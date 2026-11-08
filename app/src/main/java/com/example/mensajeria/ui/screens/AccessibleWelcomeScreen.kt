@@ -40,6 +40,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import com.example.mensajeria.ui.components.exploreTarget
 import com.example.mensajeria.ui.components.playAccessibleClickFeedback
 import com.example.mensajeria.ui.components.VoiceAssistantLogo
 import com.example.mensajeria.ui.theme.AccessibleYellow
@@ -101,6 +102,7 @@ fun AccessibleWelcomeScreen(
                     color = TextSecondaryGray,
                     fontSize = 14.sp,
                     modifier = Modifier
+                        .exploreTarget(id = "welcome_change_mode", label = "Cambiar modo")
                         .clickable {
                             playAccessibleClickFeedback(context)
                             onChangeModeClick()
@@ -140,6 +142,7 @@ fun AccessibleWelcomeScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
+                        .exploreTarget(id = "welcome_login", label = "Iniciar sesión")
                         .clickable {
                             playAccessibleClickFeedback(context)
                             onLeftTap()
@@ -212,6 +215,7 @@ fun AccessibleWelcomeScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
+                        .exploreTarget(id = "welcome_register", label = "Registrarme")
                         .clickable {
                             playAccessibleClickFeedback(context)
                             onRightTap()

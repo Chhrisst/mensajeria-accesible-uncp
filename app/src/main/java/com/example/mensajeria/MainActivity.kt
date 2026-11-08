@@ -1,6 +1,7 @@
 package com.example.mensajeria
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -13,11 +14,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import com.example.mensajeria.data.model.Contact
 import com.example.mensajeria.data.model.UserProfile
 import com.example.mensajeria.data.repository.AuthRepository
 import com.example.mensajeria.data.repository.ChatRepository
+import com.example.mensajeria.ui.components.AccessibleTouchExplorationHost
+import com.google.gson.Gson
 import com.example.mensajeria.ui.screens.AccessibilityModeSelectionScreen
 import com.example.mensajeria.ui.screens.AccessibleChatScreen
 import com.example.mensajeria.ui.screens.AccessibleContactListScreen
@@ -114,6 +118,9 @@ class MainActivity : ComponentActivity() {
                         onRequestPermission = { callback ->
                             onPermissionGrantedCallback = callback
                             requestAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        },
+                        onMinimizeApp = {
+                            moveTaskToBack(true)
                         }
                     )
                 }
@@ -134,18 +141,78 @@ fun MensajeriaApp(
     chatViewModel: ChatViewModel,
     voiceAssistantManager: VoiceAssistantManager,
     chatRepository: ChatRepository,
-    onRequestPermission: (() -> Unit) -> Unit
+    onRequestPermission: (() -> Unit) -> Unit,
+    onMinimizeApp: () -> Unit = {}
 ) {
-    var currentScreen by remember {
-        mutableStateOf(if (initialHasPermission) AppFlowScreen.INITIAL_WELCOME else AppFlowScreen.PERMISSION_CHECK)
+    val context = LocalContext.current
+    val navPrefs = remember { context.getSharedPreferences("uncp_nav_state_prefs", Context.MODE_PRIVATE) }
+    val gson = remember { Gson() }
+
+    val authState by authViewModel.uiState.collectAsState()
+    val savedSessionUser = authState.authenticatedUser ?: authViewModel.authRepository.currentUser.collectAsState().value
+
+    var isDisabilityMode by remember {
+        mutableStateOf(savedSessionUser?.hasDisability ?: navPrefs.getBoolean("is_disability_mode", true))
     }
 
-    var isDisabilityMode by remember { mutableStateOf(true) }
     val contacts by chatRepository.contacts.collectAsState()
-    var selectedContact by remember { mutableStateOf(contacts.firstOrNull() ?: Contact(id = "", name = "", username = "", description = "")) }
-    val authState by authViewModel.uiState.collectAsState()
 
-    val currentUser = authState.authenticatedUser ?: UserProfile(id = "", name = "Usuario", username = "")
+    var selectedContact by remember {
+        val savedContactJson = navPrefs.getString("selected_contact_json", null)
+        val restoredContact = try {
+            if (!savedContactJson.isNullOrBlank()) gson.fromJson(savedContactJson, Contact::class.java) else null
+        } catch (_: Exception) { null }
+        mutableStateOf(
+            restoredContact ?: contacts.firstOrNull() ?: Contact(id = "", name = "", username = "", description = "")
+        )
+    }
+
+    var currentScreen by remember {
+        val initialScreen = if (savedSessionUser != null && savedSessionUser.id.isNotBlank()) {
+            val savedScreenName = navPrefs.getString("last_auth_screen", null)
+            val restoredScreen = try {
+                if (savedScreenName != null) AppFlowScreen.valueOf(savedScreenName) else null
+            } catch (_: Exception) { null }
+
+            when {
+                restoredScreen == AppFlowScreen.ACCESSIBLE_CHAT && selectedContact.id.isNotBlank() -> AppFlowScreen.ACCESSIBLE_CHAT
+                restoredScreen == AppFlowScreen.STANDARD_CHAT && selectedContact.id.isNotBlank() -> AppFlowScreen.STANDARD_CHAT
+                savedSessionUser.hasDisability -> AppFlowScreen.ACCESSIBLE_CONTACTS
+                else -> AppFlowScreen.STANDARD_CONTACTS
+            }
+        } else {
+            if (initialHasPermission) AppFlowScreen.INITIAL_WELCOME else AppFlowScreen.PERMISSION_CHECK
+        }
+        mutableStateOf(initialScreen)
+    }
+
+    val currentUser = savedSessionUser ?: UserProfile(id = "", name = "Usuario", username = "")
+
+    // Persistir estado de navegación de la sesión activa para no perderla en segundo plano
+    androidx.compose.runtime.LaunchedEffect(currentScreen, selectedContact, currentUser, isDisabilityMode) {
+        navPrefs.edit().putBoolean("is_disability_mode", isDisabilityMode).apply()
+        if (currentUser.id.isNotBlank()) {
+            chatViewModel.isDisabilityMode = currentUser.hasDisability
+            if (currentScreen == AppFlowScreen.ACCESSIBLE_CONTACTS ||
+                currentScreen == AppFlowScreen.ACCESSIBLE_CHAT ||
+                currentScreen == AppFlowScreen.STANDARD_CONTACTS ||
+                currentScreen == AppFlowScreen.STANDARD_CHAT
+            ) {
+                navPrefs.edit()
+                    .putString("last_auth_screen", currentScreen.name)
+                    .putString("selected_contact_json", gson.toJson(selectedContact))
+                    .apply()
+            }
+            if ((currentScreen == AppFlowScreen.ACCESSIBLE_CHAT || currentScreen == AppFlowScreen.STANDARD_CHAT) && selectedContact.id.isNotBlank()) {
+                chatViewModel.setContact(selectedContact, currentUser.id)
+            }
+        } else {
+            navPrefs.edit()
+                .remove("last_auth_screen")
+                .remove("selected_contact_json")
+                .apply()
+        }
+    }
 
     // Sincronizar callbacks del Asistente de Voz Inteligente con el estado actual
     androidx.compose.runtime.LaunchedEffect(currentScreen, selectedContact, currentUser) {
@@ -179,6 +246,22 @@ fun MensajeriaApp(
         voiceAssistantManager.stopAssistant()
     }
 
+    val isExploreEnabled = when (currentScreen) {
+        AppFlowScreen.STANDARD_LOGIN,
+        AppFlowScreen.STANDARD_REGISTER,
+        AppFlowScreen.STANDARD_CONTACTS,
+        AppFlowScreen.STANDARD_CHAT -> false
+        else -> true
+    }
+
+    AccessibleTouchExplorationHost(
+        enabled = isExploreEnabled,
+        screenKey = currentScreen,
+        onExploreHover = { shortLabel ->
+            authViewModel.triggerHoverVibration()
+            authViewModel.ttsService.speak(shortLabel)
+        }
+    ) {
     when (currentScreen) {
         // 0. PERMISOS
         AppFlowScreen.PERMISSION_CHECK -> {
@@ -279,8 +362,7 @@ fun MensajeriaApp(
         // 2.4 LISTA DE CONTACTOS CON NAVEGACIÓN HÁPTICA Y SELECCIÓN POR LADOS
         AppFlowScreen.ACCESSIBLE_CONTACTS -> {
             BackHandler {
-                authViewModel.logout()
-                currentScreen = AppFlowScreen.ACCESSIBLE_WELCOME
+                onMinimizeApp()
             }
             androidx.compose.runtime.LaunchedEffect(currentUser.id) {
                 chatRepository.setSessionUser(currentUser.id)
@@ -358,8 +440,7 @@ fun MensajeriaApp(
         // 3.1 LISTA DE CONTACTOS ESTÁNDAR
         AppFlowScreen.STANDARD_CONTACTS -> {
             BackHandler {
-                authViewModel.logout()
-                currentScreen = AppFlowScreen.STANDARD_LOGIN
+                onMinimizeApp()
             }
             androidx.compose.runtime.LaunchedEffect(currentUser.id) {
                 chatRepository.setSessionUser(currentUser.id)
@@ -396,5 +477,6 @@ fun MensajeriaApp(
                 }
             )
         }
+    }
     }
 }
