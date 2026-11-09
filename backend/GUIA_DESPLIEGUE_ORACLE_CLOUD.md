@@ -33,7 +33,7 @@ sudo netfilter-persistent save
 
 Desde PowerShell en tu computadora:
 ```powershell
-scp -i "tu_clave.key" -r "C:\Users\Christ\Documents\TRABAJO DE INVESTIGACION\PROYECTO\backend\*" ubuntu@150.136.172.213:~/mensajeria-db/
+scp -i "tu_clave.key" -r ".\backend\*" ubuntu@TU_IP_VPS_ORACLE:~/mensajeria-db/
 ```
 
 O si prefieres, conéctate por SSH y clona/actualiza los archivos en `~/mensajeria-db`.
@@ -62,7 +62,7 @@ Verás:
 ## 4. Probar la API y Documentación Interactiva (Swagger UI)
 
 Abre en tu navegador web:
-👉 **`http://150.136.172.213:8000/docs`**
+👉 **`http://TU_IP_VPS_ORACLE:8000/docs`**
 
 FastAPI genera automáticamente una interfaz web interactiva donde tú y tus compañeros pueden:
 - Probar el inicio de sesión (`POST /api/auth/login`)
@@ -71,10 +71,12 @@ FastAPI genera automáticamente una interfaz web interactiva donde tú y tus com
 
 ---
 
-## 5. La App Android ya está Conectada
+## 5. Conexión de la App Android
 
-La app Android incluye la biblioteca de red **Retrofit** configurada apuntando a:
-`http://150.136.172.213:8000/`
+La app Android incluye la biblioteca de red **Retrofit** configurada dinámicamente mediante `local.properties`:
+```properties
+backend.base.url=http://TU_IP_VPS_ORACLE:8000/
+```
 
 Cuando un usuario inicia sesión o se registra desde la app en el celular:
 1. La app envía la petición a la API FastAPI en tu VPS.

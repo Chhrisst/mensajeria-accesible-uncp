@@ -49,6 +49,7 @@ if not exist "local.properties" (
             echo ## Generado automaticamente por verificar_entorno.bat
             echo sdk.dir=C\:\\Users\\%USERNAME%\\AppData\\Local\\Android\\Sdk
             echo gemini.api.key=
+            echo backend.base.url=http://10.0.2.2:8000/
         ) > "local.properties"
         echo   [OK] 'local.properties' ha sido creado exitosamente.
     ) else (

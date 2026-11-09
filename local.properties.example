@@ -2,7 +2,12 @@
 ## Copia o renombra este archivo como 'local.properties' en la misma carpeta del proyecto
 
 # Ruta absoluta hacia tu Android SDK local (ejemplo para Windows):
-sdk.dir=C\:\\Users\\Christ\\AppData\\Local\\Android\\Sdk
+sdk.dir=C\:\\Users\\TU_USUARIO\\AppData\\Local\\Android\\Sdk
 
 # Clave de API de Google Gemini (Google AI Studio):
 gemini.api.key=AIzaSy...
+
+# URL del servidor backend (FastAPI):
+# Para emulador Android local usa: http://10.0.2.2:8000/
+# Para servidor remoto privado usa: http://IP_O_DOMINIO_DEL_SERVIDOR:8000/
+backend.base.url=http://10.0.2.2:8000/

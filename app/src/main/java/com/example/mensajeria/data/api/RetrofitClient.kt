@@ -1,5 +1,6 @@
 package com.example.mensajeria.data.api
 
+import com.example.mensajeria.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -8,8 +9,15 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
 
-    // IP pública de Oracle Cloud VPS y puerto del servicio FastAPI
-    private const val DEFAULT_BASE_URL = "http://150.136.172.213:8000/"
+    // Base URL inyectada de forma segura desde local.properties mediante BuildConfig
+    private val DEFAULT_BASE_URL: String = run {
+        val configured = BuildConfig.BACKEND_BASE_URL.trim()
+        if (configured.isNotBlank()) {
+            if (configured.endsWith("/")) configured else "$configured/"
+        } else {
+            "http://10.0.2.2:8000/"
+        }
+    }
 
     var baseUrl: String = DEFAULT_BASE_URL
 

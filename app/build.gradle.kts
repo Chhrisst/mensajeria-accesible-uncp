@@ -18,6 +18,7 @@ android {
         localProperties.load(localPropertiesFile.inputStream())
     }
     val geminiApiKey = localProperties.getProperty("gemini.api.key") ?: ""
+    val backendBaseUrl = localProperties.getProperty("backend.base.url") ?: "http://10.0.2.2:8000/"
 
     defaultConfig {
         applicationId = "com.example.mensajeria"
@@ -28,6 +29,7 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
+        buildConfigField("String", "BACKEND_BASE_URL", "\"$backendBaseUrl\"")
     }
 
     buildTypes {
