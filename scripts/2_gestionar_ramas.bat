@@ -24,23 +24,25 @@ echo =====================================================================
 echo   [1] Cambiar a la rama principal (main) y actualizar (git pull)
 echo   [2] Crear una NUEVA rama a partir de 'main'
 echo   [3] Cambiar a otra rama existente
-echo   [4] Ver estado detallado (git status)
-echo   [5] Salir
+echo   [4] ELIMINAR una rama (con doble confirmacion)
+echo   [5] Ver estado detallado (git status)
+echo   [6] Salir
 echo =====================================================================
 echo.
 
 set "OPC="
-set /p "OPC=Elige una opcion (1-5): "
+set /p "OPC=Elige una opcion (1-6): "
 
 if "!OPC!"=="1" goto :cambiar_main
 if "!OPC!"=="2" goto :crear_rama
 if "!OPC!"=="3" goto :cambiar_existente
-if "!OPC!"=="4" goto :ver_status
-if "!OPC!"=="5" goto :salir
+if "!OPC!"=="4" goto :eliminar_rama
+if "!OPC!"=="5" goto :ver_status
+if "!OPC!"=="6" goto :salir
 
 echo.
 echo Opcion no valida. Intenta nuevamente.
-timeout /t 2 >nul
+ping 127.0.0.1 -n 2 >nul
 goto :menu
 
 :cambiar_main
@@ -83,6 +85,102 @@ if "!RAMA_DESTINO!"=="" (
     goto :menu
 )
 git checkout "!RAMA_DESTINO!"
+echo.
+pause
+goto :menu
+
+:eliminar_rama
+echo.
+echo =====================================================================
+echo                ELIMINAR UNA RAMA DE TRABAJO
+echo =====================================================================
+echo   Ramas locales disponibles:
+git branch
+echo =====================================================================
+echo.
+set "RAMA_A_ELIMINAR="
+set /p "RAMA_A_ELIMINAR=Ingresa el nombre de la rama que deseas eliminar (o presiona ENTER para cancelar): "
+
+if "!RAMA_A_ELIMINAR!"=="" (
+    echo Operacion cancelada.
+    pause
+    goto :menu
+)
+
+if /i "!RAMA_A_ELIMINAR!"=="main" (
+    echo.
+    echo [X] SEGURIDAD: Por proteccion, NO esta permitido eliminar la rama principal 'main'.
+    pause
+    goto :menu
+)
+
+if /i "!RAMA_A_ELIMINAR!"=="master" (
+    echo.
+    echo [X] SEGURIDAD: Por proteccion, NO esta permitido eliminar la rama 'master'.
+    pause
+    goto :menu
+)
+
+if /i "!RAMA_A_ELIMINAR!"=="!RAMA_ACTUAL!" (
+    echo.
+    echo [X] ERROR: Estas actualmente en la rama '!RAMA_A_ELIMINAR!'.
+    echo     No puedes eliminar la rama en la que estas parado actualmente.
+    echo     Cambia a 'main' primero (opcion 1) y luego intenta eliminarla.
+    pause
+    goto :menu
+)
+
+echo.
+echo =====================================================================
+echo [1/2] PRIMERA CONFIRMACION:
+echo =====================================================================
+echo   Rama seleccionada para eliminar: [!RAMA_A_ELIMINAR!]
+echo.
+set "CONFIRM_DEL_1="
+set /p "CONFIRM_DEL_1=Deseas eliminar esta rama local? (S/N): "
+
+if /i not "!CONFIRM_DEL_1!"=="S" (
+    echo.
+    echo [!] Eliminacion CANCELADA por el usuario. La rama no fue modificada.
+    pause
+    goto :menu
+)
+
+echo.
+echo =====================================================================
+echo [2/2] SEGUNDA CONFIRMACION CRITICA (ACCION IRREVERSIBLE):
+echo =====================================================================
+echo   ATENCION: Se borrara permanentemente la rama local [!RAMA_A_ELIMINAR!].
+echo   Los commits no fusionados podrian perderse.
+echo =====================================================================
+echo.
+set "CONFIRM_DEL_2="
+set /p "CONFIRM_DEL_2=Confirmas al 100%% la eliminacion definitiva de '!RAMA_A_ELIMINAR!'? (S/N): "
+
+if /i not "!CONFIRM_DEL_2!"=="S" (
+    echo.
+    echo [!] Eliminacion DEFINITIVA CANCELADA. La rama sigue existiendo intacta.
+    pause
+    goto :menu
+)
+
+echo.
+echo Eliminando rama local '!RAMA_A_ELIMINAR!'...
+git branch -d "!RAMA_A_ELIMINAR!" 2>nul
+if !errorlevel! equ 0 (
+    echo [OK] La rama local '!RAMA_A_ELIMINAR!' fue eliminada correctamente.
+) else (
+    echo [!] La rama contiene cambios que aun no han sido fusionados con 'main'.
+    set "FORCE_DEL="
+    set /p "FORCE_DEL=Deseas forzar la eliminacion de todas formas (git branch -D)? (S/N): "
+    if /i "!FORCE_DEL!"=="S" (
+        git branch -D "!RAMA_A_ELIMINAR!"
+        echo [OK] Rama '!RAMA_A_ELIMINAR!' forzada y eliminada.
+    ) else (
+        echo [i] Se cancelo el forzado. La rama se conserva intacta.
+    )
+)
+
 echo.
 pause
 goto :menu

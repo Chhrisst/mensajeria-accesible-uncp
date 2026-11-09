@@ -25,6 +25,7 @@ Esta carpeta contiene utilidades en lote (`.bat`) para facilitar el trabajo en e
   2. Permite volver a la rama principal (`main`) y sincronizar los últimos cambios con `git pull`.
   3. Permite crear una nueva rama de trabajo (por ejemplo `feature/nuevo-modulo`) partiendo de `main` actualizado.
   4. Permite cambiar de rama fácilmente.
+  5. **Eliminar ramas con doble confirmación:** Permite borrar ramas locales que ya no se usen con doble verificación de seguridad, impidiendo por regla borrar la rama `main` o la rama activa actual.
 
 ### 3. `3_subir_cambios.bat`
 * **¿Qué hace?**
