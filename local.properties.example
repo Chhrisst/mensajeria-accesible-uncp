@@ -1,0 +1,8 @@
+## Plantilla de configuración local para Mensajeria UNCP IA
+## Copia o renombra este archivo como 'local.properties' en la misma carpeta del proyecto
+
+# Ruta absoluta hacia tu Android SDK local (ejemplo para Windows):
+sdk.dir=C\:\\Users\\Christ\\AppData\\Local\\Android\\Sdk
+
+# Clave de API de Google Gemini (Google AI Studio):
+gemini.api.key=AIzaSy...

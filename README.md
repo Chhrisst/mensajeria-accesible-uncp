@@ -95,14 +95,22 @@ com.example.mensajeria/
    git clone https://github.com/Chhrisst/mensajeria-accesible-uncp.git
    cd mensajeria-accesible-uncp
    ```
-2. Abrir el proyecto en **Android Studio** (versión Ladybug / Iguana o superior).
-3. Sincronizar las dependencias de Gradle.
-4. Conectar un dispositivo físico Android o iniciar un emulador con API 24+.
-5. Ejecutar la tarea de compilación:
+2. **Diagnóstico Automático (Windows):**
+   * En la carpeta `scripts/`, haz doble clic en `1_verificar_entorno.bat`.
+   * El script comprobará automáticamente tu versión de Java (JDK 17+ requerido), creará tu `local.properties` si no existe, y compilará el proyecto de prueba.
+3. Abrir el proyecto en **Android Studio** (versión Quail / Rabbit o superior con Android SDK Platform 36).
+4. Sincronizar las dependencias de Gradle.
+5. Conectar un dispositivo físico Android o iniciar un emulador con API 24+.
+6. Ejecutar la tarea de compilación:
    ```bash
    ./gradlew assembleDebug
    ```
    El APK generado se ubicará en: `app/build/outputs/apk/debug/app-debug.apk`.
+
+### 🛠️ Scripts de Ayuda para el Equipo (`scripts/`):
+* `1_verificar_entorno.bat`: Revisa JDK, SDK, genera `local.properties` y prueba compilación.
+* `2_gestionar_ramas.bat`: Permite crear ramas de trabajo o regresar a `main` actualizado.
+* `3_subir_cambios.bat`: Realiza commits y sube a GitHub con **doble confirmación de seguridad**.
 
 ---
 

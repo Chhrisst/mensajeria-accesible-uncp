@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: uncp_postgres_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mensajeria_uncp}
+      POSTGRES_USER: ${POSTGRES_USER:-admin_uncp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-uncp_secure_password_2026}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin_uncp} -d ${POSTGRES_DB:-mensajeria_uncp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - uncp_network
+
+  # Gestor web visual ultra-ligero (solo ~15MB) para ver y administrar las tablas desde el navegador
+  adminer:
+    image: adminer:latest
+    container_name: uncp_db_adminer
+    restart: unless-stopped
+    ports:
+      - "${ADMINER_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - uncp_network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  uncp_network:
+    driver: bridge

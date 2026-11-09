@@ -1,0 +1,22 @@
+# Entornos virtuales y dependencias Python
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Variables de entorno y secretos sensibles (NUNCA subir a Git)
+.env
+*.env
+*.pem
+*.key
+
+# Bases de datos y volumenes locales
+*.sqlite3
+docker/data/
+postgres_data/
+
+# IDEs
+.idea/
+.vscode/
