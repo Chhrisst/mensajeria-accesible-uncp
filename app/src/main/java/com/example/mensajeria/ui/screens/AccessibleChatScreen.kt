@@ -194,7 +194,7 @@ fun AccessibleChatScreen(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .exploreTarget(id = "chat_contact_header", label = contact.name)
+                        .exploreTarget(id = "chat_contact_header", label = "Contacto ${contact.name}")
                 ) {
                     Text(
                         text = contact.name,
@@ -203,11 +203,13 @@ fun AccessibleChatScreen(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.semantics { heading() }
                     )
-                    Text(
-                        text = if (contact.isOnline) "● En línea" else "Desconectado",
-                        color = if (contact.isOnline) Color(0xFF00E676) else TextSecondaryGray,
-                        fontSize = 13.sp
-                    )
+                    if (contact.isOnline) {
+                        Text(
+                            text = "● En línea",
+                            color = Color(0xFF00E676),
+                            fontSize = 13.sp
+                        )
+                    }
                 }
             }
 
@@ -444,7 +446,7 @@ fun AccessibleChatScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp)
-                            .exploreTarget(id = "chat_repeat_btn", label = "Último mensaje")
+                            .exploreTarget(id = "chat_repeat_btn", label = "Escuchar último mensaje")
                             .clickable {
                                 chatViewModel.soundService.playButtonClickSound()
                                 chatViewModel.repeatLastMessage()

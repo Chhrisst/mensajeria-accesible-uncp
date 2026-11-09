@@ -65,9 +65,9 @@ class ChatRepository(private val context: Context? = null) {
             if (!json.isNullOrBlank()) {
                 val type = object : TypeToken<List<Contact>>() {}.type
                 val savedList: List<Contact> = gson.fromJson(json, type)
-                if (savedList.isNotEmpty()) {
-                    _contacts.value = savedList
-                }
+                // Sanitizar: Eliminar contactos temporales o ficticios ("c_...")
+                val validContacts = savedList.filter { !it.id.startsWith("c_") && it.id.isNotBlank() }
+                _contacts.value = validContacts
             }
         } catch (_: Exception) {}
     }
@@ -76,7 +76,8 @@ class ChatRepository(private val context: Context? = null) {
         val ctx = getEffectiveContext() ?: return
         try {
             val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val json = gson.toJson(_contacts.value)
+            val validContacts = _contacts.value.filter { !it.id.startsWith("c_") && it.id.isNotBlank() }
+            val json = gson.toJson(validContacts)
             prefs.edit().putString(getContactsPrefKey(userId), json).apply()
         } catch (_: Exception) {}
     }
@@ -101,7 +102,7 @@ class ChatRepository(private val context: Context? = null) {
                         name = c.name,
                         username = c.username ?: "",
                         description = c.lastMessage ?: c.visualCondition,
-                        isOnline = true
+                        isOnline = c.isOnline ?: false
                     )
                 }
                 _contacts.value = mapped
@@ -119,11 +120,15 @@ class ChatRepository(private val context: Context? = null) {
      * Agrega un nuevo contacto buscando por su identificador único (@username).
      */
     suspend fun addContactByUsername(userId: String, username: String): Result<Contact> {
+        val clean = username.trim().removePrefix("@")
+        if (clean.isBlank()) {
+            return Result.failure(Exception("Debe ingresar un nombre de usuario válido."))
+        }
         return try {
             val response = RetrofitClient.api.addContact(
                 ApiAddContactRequest(
                     userId = userId,
-                    contactUsername = username.trim()
+                    contactUsername = clean
                 )
             )
             if (response.isSuccessful && response.body() != null) {
@@ -133,17 +138,30 @@ class ChatRepository(private val context: Context? = null) {
                     name = c.name,
                     username = c.username ?: "",
                     description = c.lastMessage ?: c.visualCondition,
-                    isOnline = true
+                    isOnline = c.isOnline ?: false
                 )
                 _contacts.update { current ->
-                    val filtered = current.filter { it.id != newContact.id }
+                    val filtered = current.filter { it.id != newContact.id && !it.id.startsWith("c_") }
                     listOf(newContact) + filtered
                 }
                 persistContacts(userId)
                 Result.success(newContact)
             } else {
-                val errorMsg = response.errorBody()?.string() ?: "Usuario no encontrado."
-                Result.failure(Exception(errorMsg))
+                val rawError = response.errorBody()?.string() ?: ""
+                val cleanError = try {
+                    val jsonObj = org.json.JSONObject(rawError)
+                    jsonObj.optString("detail", rawError)
+                } catch (_: Exception) {
+                    rawError
+                }
+                val finalMessage = if (response.code() == 404 || cleanError.contains("No se encontró", ignoreCase = true) || cleanError.contains("no existe", ignoreCase = true)) {
+                    "El usuario @$clean no existe en el sistema UNCP."
+                } else if (cleanError.isNotBlank()) {
+                    cleanError
+                } else {
+                    "No se pudo agregar al usuario @$clean."
+                }
+                Result.failure(Exception(finalMessage))
             }
         } catch (e: Exception) {
             Result.failure(e)

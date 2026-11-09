@@ -14,7 +14,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.dp
 
@@ -26,26 +26,59 @@ data class ExploreTarget(
 )
 
 class TouchExploreRegistry {
-    private val targets = LinkedHashMap<String, ExploreTarget>()
+    private val targets = LinkedHashMap<String, LayoutCoordinates>()
+    private val labels = LinkedHashMap<String, String>()
+    private val onHovers = LinkedHashMap<String, (() -> Unit)?>()
+    var hostCoordinates: LayoutCoordinates? = null
 
-    fun register(id: String, label: String, bounds: Rect, onHover: (() -> Unit)? = null) {
-        if (bounds.width > 0f && bounds.height > 0f) {
-            targets[id] = ExploreTarget(id = id, label = label, bounds = bounds, onHover = onHover)
-        }
+    fun register(id: String, label: String, coordinates: LayoutCoordinates, onHover: (() -> Unit)? = null) {
+        targets[id] = coordinates
+        labels[id] = label
+        onHovers[id] = onHover
     }
 
     fun unregister(id: String) {
         targets.remove(id)
+        labels.remove(id)
+        onHovers.remove(id)
     }
 
     fun clear() {
         targets.clear()
+        labels.clear()
+        onHovers.clear()
     }
 
     fun findTargetAt(position: Offset): ExploreTarget? {
-        return targets.values
-            .filter { it.bounds.contains(position) }
-            .minByOrNull { it.bounds.width * it.bounds.height }
+        val host = hostCoordinates ?: return null
+        if (!host.isAttached) return null
+
+        var bestTarget: ExploreTarget? = null
+        var minArea = Float.MAX_VALUE
+
+        for ((id, coords) in targets) {
+            if (coords.isAttached) {
+                val bounds = try {
+                    host.localBoundingBoxOf(coords)
+                } catch (_: Exception) {
+                    null
+                } ?: continue
+
+                if (bounds.contains(position)) {
+                    val area = bounds.width * bounds.height
+                    if (area in 1f..minArea) {
+                        minArea = area
+                        bestTarget = ExploreTarget(
+                            id = id,
+                            label = labels[id] ?: "",
+                            bounds = bounds,
+                            onHover = onHovers[id]
+                        )
+                    }
+                }
+            }
+        }
+        return bestTarget
     }
 }
 
@@ -77,7 +110,7 @@ fun Modifier.exploreTarget(
                 registry.register(
                     id = id,
                     label = currentLabel.value,
-                    bounds = coordinates.boundsInRoot(),
+                    coordinates = coordinates,
                     onHover = currentOnHover.value
                 )
             }
@@ -104,6 +137,11 @@ fun AccessibleTouchExplorationHost(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .onGloballyPositioned { coordinates ->
+                    if (coordinates.isAttached) {
+                        registry.hostCoordinates = coordinates
+                    }
+                }
                 .pointerInput(enabled, screenKey) {
                     if (!enabled) return@pointerInput
                     val slideThresholdPx = 14.dp.toPx()

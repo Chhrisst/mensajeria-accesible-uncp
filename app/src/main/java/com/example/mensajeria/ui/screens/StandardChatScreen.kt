@@ -119,14 +119,18 @@ fun StandardChatScreen(
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        text = if (contact.isOnline) "en línea" else "desconectado",
-                        color = if (contact.isOnline) whatsappGreen else TextSecondaryGray,
-                        fontSize = 12.sp
-                    )
+                    if (contact.isOnline) {
+                        Text(
+                            text = "en línea",
+                            color = whatsappGreen,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
             }
         }
+
+        val timeFormat = remember { java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()) }
 
         // LISTA DE MENSAJES ESTILO WHATSAPP
         LazyColumn(
@@ -138,6 +142,7 @@ fun StandardChatScreen(
         ) {
             items(uiState.messages.reversed()) { message ->
                 val isOutgoing = message.isOutgoing
+                val timeStr = timeFormat.format(java.util.Date(message.timestamp))
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -174,7 +179,7 @@ fun StandardChatScreen(
                             )
 
                             Text(
-                                text = "12:35",
+                                text = timeStr,
                                 color = TextSecondaryGray,
                                 fontSize = 11.sp,
                                 modifier = Modifier.align(Alignment.End)

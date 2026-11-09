@@ -31,10 +31,18 @@ class VibrationService(context: Context) {
     }
 
     /**
-     * Vibración táctil ultra rápida para confirmación al pulsar cualquier botón.
+     * Vibración táctil para confirmación al pulsar cualquier botón.
      */
     fun vibrateClick() {
-        vibrate(30)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                vibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+            } catch (_: Exception) {
+                vibrate(35)
+            }
+        } else {
+            vibrate(35)
+        }
     }
 
     fun vibrateStartListening() {
@@ -43,10 +51,18 @@ class VibrationService(context: Context) {
     }
 
     /**
-     * Vibración ultra-corta al arrastrar el dedo y pasar sobre un elemento nuevo.
+     * Vibración táctil distintiva al arrastrar el dedo y pasar sobre cualquier botón o el nombre de usuario.
      */
     fun vibrateHover() {
-        vibrate(22)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                vibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
+            } catch (_: Exception) {
+                vibrate(35)
+            }
+        } else {
+            vibrate(35)
+        }
     }
 
     /**

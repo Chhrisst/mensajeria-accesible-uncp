@@ -50,7 +50,8 @@ data class ApiContactResponse(
     @SerializedName("visual_condition") val visualCondition: String,
     @SerializedName("last_message") val lastMessage: String? = null,
     @SerializedName("last_message_time") val lastMessageTime: String? = null,
-    @SerializedName("unread_count") val unreadCount: Int? = 0
+    @SerializedName("unread_count") val unreadCount: Int? = 0,
+    @SerializedName("is_online") val isOnline: Boolean? = false
 )
 
 data class ApiSendMessageRequest(

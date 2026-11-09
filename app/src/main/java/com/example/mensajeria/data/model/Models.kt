@@ -23,7 +23,7 @@ data class Contact(
     val name: String,
     val username: String = "",
     val description: String = "",
-    val isOnline: Boolean = true
+    val isOnline: Boolean = false
 )
 
 /**

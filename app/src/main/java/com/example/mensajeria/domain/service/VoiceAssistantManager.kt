@@ -241,7 +241,7 @@ class VoiceAssistantManager(
 
             "ADD_CONTACT" -> {
                 val identifier = result.contactName ?: result.targetContact ?: ""
-                val clean = identifier.trim()
+                val clean = identifier.trim().removePrefix("@")
                 val currentUserId = getCurrentUserId()
                 if (clean.isNotBlank()) {
                     pendingAction = null
@@ -250,12 +250,24 @@ class VoiceAssistantManager(
                             val addResult = chatRepository.addContactByUsername(currentUserId, clean)
                             if (addResult.isSuccess) {
                                 val added = addResult.getOrNull()!!
-                                ttsService.speak("Contacto @${added.username} agregado exitosamente a tu lista.")
-                                return@launch
+                                val displayName = if (added.username.isNotBlank()) "@${added.username}" else added.name
+                                ttsService.speak("Contacto $displayName agregado exitosamente a tu lista.")
+                            } else {
+                                val errorMsg = addResult.exceptionOrNull()?.message ?: ""
+                                val speechError = if (errorMsg.contains("no existe", ignoreCase = true) || errorMsg.contains("404") || errorMsg.contains("No se encontró", ignoreCase = true)) {
+                                    "El usuario arroba $clean no existe en el sistema UNCP. Por favor, verifica el nombre de usuario e intenta nuevamente."
+                                } else if (errorMsg.contains("mismo", ignoreCase = true)) {
+                                    "No puedes agregarte a ti mismo como contacto."
+                                } else if (errorMsg.contains("ya existe", ignoreCase = true) || errorMsg.contains("ya está", ignoreCase = true)) {
+                                    "El usuario arroba $clean ya está en tu lista de contactos."
+                                } else {
+                                    "No se pudo agregar al usuario arroba $clean. Verifica que exista en la plataforma UNCP."
+                                }
+                                ttsService.speak(speechError)
                             }
+                        } else {
+                            ttsService.speak("Debes iniciar sesión para agregar contactos.")
                         }
-                        val added = chatRepository.addContact(name = clean, phone = result.contactPhone ?: "")
-                        ttsService.speak("Contacto ${added.name} guardado en tu lista.")
                     }
                 } else {
                     // Cuando aún no hay nombre (la IA está preguntándolo), no crear ningún contacto falso

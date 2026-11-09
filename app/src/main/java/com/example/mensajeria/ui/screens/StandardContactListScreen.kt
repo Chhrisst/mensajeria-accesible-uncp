@@ -112,17 +112,18 @@ fun StandardContactListScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        val clean = newContactUsername.trim()
+                        val clean = newContactUsername.trim().removePrefix("@")
                         if (clean.isNotBlank() && chatRepository != null) {
                             isAdding = true
                             coroutineScope.launch {
                                 val result = chatRepository.addContactByUsername(currentUser.id, clean)
                                 isAdding = false
-                                showAddDialog = false
-                                newContactUsername = ""
                                 if (result.isSuccess) {
+                                    showAddDialog = false
+                                    newContactUsername = ""
                                     val added = result.getOrNull()!!
-                                    Toast.makeText(context, "Contacto @${added.username} agregado", Toast.LENGTH_SHORT).show()
+                                    val displayName = if (added.username.isNotBlank()) "@${added.username}" else added.name
+                                    Toast.makeText(context, "Contacto $displayName agregado", Toast.LENGTH_SHORT).show()
                                 } else {
                                     val err = result.exceptionOrNull()?.message ?: "Usuario no encontrado"
                                     Toast.makeText(context, err, Toast.LENGTH_LONG).show()

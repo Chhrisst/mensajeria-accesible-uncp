@@ -96,7 +96,7 @@ fun AccessibleVoiceAssistantBar(
         modifier = modifier
             .fillMaxWidth()
             .height(72.dp)
-            .exploreTarget(id = "voice_assistant_bar", label = "Asistente de voz")
+            .exploreTarget(id = "voice_assistant_bar", label = "Asistente de voz IA")
             .clickable(onClick = onAssistantClick)
             .semantics {
                 this.role = Role.Button
