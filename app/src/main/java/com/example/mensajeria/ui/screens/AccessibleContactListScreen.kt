@@ -28,6 +28,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import com.example.mensajeria.domain.service.VoiceAssistantManager
 import com.example.mensajeria.domain.service.VoiceAssistantState
 import com.example.mensajeria.ui.components.AccessibleVoiceAssistantBar
@@ -220,44 +224,48 @@ fun AccessibleContactListScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Tarjetas de contactos ocupando armoniosamente el espacio
-            Column(
+            // Lista de tarjetas de contactos con altura fija y diseño accesible proporcional
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .weight(1f)
+                    .padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 if (contacts.isEmpty()) {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .exploreTarget(id = "empty_contacts_card", label = "Sin contactos"),
-                        shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = DarkCardBackground),
-                        border = BorderStroke(2.dp, AccessibleYellow.copy(alpha = 0.5f))
-                    ) {
-                        Box(
+                    item {
+                        Card(
                             modifier = Modifier
-                                .fillMaxSize()
-                                .padding(24.dp),
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .height(150.dp)
+                                .exploreTarget(id = "empty_contacts_card", label = "Sin contactos"),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = DarkCardBackground),
+                            border = BorderStroke(2.dp, AccessibleYellow.copy(alpha = 0.5f))
                         ) {
-                            Text(
-                                text = "Aún no tienes contactos.\nUsa el Asistente de Voz para agregar contactos por su usuario.",
-                                color = Color.White,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(20.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Aún no tienes contactos.\nUsa el Asistente de Voz para agregar contactos por su usuario.",
+                                    color = Color.White,
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
                         }
                     }
                 } else {
-                    contacts.forEachIndexed { index, contact ->
+                    itemsIndexed(contacts) { index, contact ->
                         val isFocused = index == focusedIndex
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(1f)
+                                .height(88.dp)
                                 .exploreTarget(
                                     id = "contact_${contact.id}_$index",
                                     label = contact.name,
@@ -271,60 +279,64 @@ fun AccessibleContactListScreen(
                                     this.role = Role.Button
                                     this.contentDescription = contact.name
                                 },
-                        shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isFocused) AccessibleYellow else DarkCardBackground
-                        ),
-                        border = BorderStroke(2.5.dp, AccessibleYellow)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 20.dp, vertical = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isFocused) AccessibleYellow else DarkCardBackground
+                            ),
+                            border = BorderStroke(2.5.dp, AccessibleYellow)
                         ) {
-                            Box(
+                            Row(
                                 modifier = Modifier
-                                    .size(54.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isFocused) PureBlack else Color(0xFF2C2C2E)),
-                                contentAlignment = Alignment.Center
+                                    .fillMaxSize()
+                                    .padding(horizontal = 18.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Person,
-                                    contentDescription = null,
-                                    tint = if (isFocused) AccessibleYellow else Color.White,
-                                    modifier = Modifier.size(30.dp)
-                                )
-                            }
+                                Box(
+                                    modifier = Modifier
+                                        .size(52.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isFocused) PureBlack else Color(0xFF2C2C2E)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = if (isFocused) AccessibleYellow else Color.White,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
 
-                            Spacer(modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.size(16.dp))
 
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = contact.name,
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isFocused) PureBlack else Color.White
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = contact.description,
-                                    fontSize = 13.sp,
-                                    color = if (isFocused) Color(0xFF262626) else TextSecondaryGray
-                                )
-                            }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = contact.name,
+                                        fontSize = 19.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isFocused) PureBlack else Color.White,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (contact.username.isNotBlank()) "@${contact.username}" else contact.description,
+                                        fontSize = 13.sp,
+                                        color = if (isFocused) Color(0xFF262626) else TextSecondaryGray,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
 
-                            if (isFocused) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Chat,
-                                    contentDescription = null,
-                                    tint = PureBlack,
-                                    modifier = Modifier.size(26.dp)
-                                )
+                                if (isFocused) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Chat,
+                                        contentDescription = null,
+                                        tint = PureBlack,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
                             }
                         }
-                    }
                     }
                 }
             }

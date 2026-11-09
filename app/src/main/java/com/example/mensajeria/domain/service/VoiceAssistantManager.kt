@@ -58,6 +58,10 @@ class VoiceAssistantManager(
     private val _state = MutableStateFlow(VoiceAssistantState())
     val state: StateFlow<VoiceAssistantState> = _state.asStateFlow()
 
+    // Historial para conversaciones continuas con el Asistente IA
+    private val dialogueHistory = mutableListOf<Pair<String, String>>()
+    private var pendingAction: String? = null
+
     // Callbacks de navegación y UI
     var onOpenChat: ((Contact) -> Unit)? = null
     var onBackToContacts: (() -> Unit)? = null
@@ -105,10 +109,12 @@ class VoiceAssistantManager(
             onError = { errorMsg ->
                 Log.w("VoiceAssistantManager", "Error de captura: $errorMsg")
                 vibrationService.vibrateError()
+                dialogueHistory.clear()
+                pendingAction = null
                 _state.update {
                     it.copy(
                         mode = AssistantMode.STANDBY,
-                        feedbackMessage = "Toca para hablarle al Asistente IA"
+                        feedbackMessage = "Asistente de Voz IA"
                     )
                 }
             }
@@ -150,7 +156,11 @@ class VoiceAssistantManager(
                 recentMessages = recentMessages
             )
 
-            val result = GeminiDirectClient.processVoiceCommand(cleanCommand, assistantContext)
+            val result = GeminiDirectClient.processVoiceCommand(
+                spokenText = cleanCommand,
+                context = assistantContext,
+                dialogueHistory = dialogueHistory
+            )
 
             _state.update {
                 it.copy(
@@ -162,15 +172,36 @@ class VoiceAssistantManager(
             // Ejecutar la mutación de estado o navegación
             executeAction(result)
 
+            val isQuestion = result.spokenResponse.contains("?") ||
+                    result.spokenResponse.contains("¿") ||
+                    (result.action == "ADD_CONTACT" && (result.contactName.isNullOrBlank() && result.targetContact.isNullOrBlank())) ||
+                    (result.action == "SEND_MESSAGE" && result.messageText.isNullOrBlank())
+
             // Narrar la respuesta por voz al usuario
             ttsService.speak(
                 result.spokenResponse,
                 onDone = {
-                    _state.update {
-                        it.copy(
-                            mode = AssistantMode.STANDBY,
-                            feedbackMessage = "Toca para hablarle al Asistente IA"
-                        )
+                    if (isQuestion && !isDestroyed) {
+                        // Guardar en el historial de la conversación el turno para recordar la pregunta
+                        dialogueHistory.add(cleanCommand to result.spokenResponse)
+                        if (dialogueHistory.size > 6) {
+                            dialogueHistory.removeAt(0)
+                        }
+                        // Esperar 400ms a que el hardware libere el audio y reactivar el micrófono para la respuesta del usuario
+                        mainHandler.postDelayed({
+                            if (!isDestroyed) {
+                                activateAssistant()
+                            }
+                        }, 400)
+                    } else {
+                        dialogueHistory.clear()
+                        pendingAction = null
+                        _state.update {
+                            it.copy(
+                                mode = AssistantMode.STANDBY,
+                                feedbackMessage = "Asistente de Voz IA"
+                            )
+                        }
                     }
                 }
             )
@@ -212,20 +243,23 @@ class VoiceAssistantManager(
                 val identifier = result.contactName ?: result.targetContact ?: ""
                 val clean = identifier.trim()
                 val currentUserId = getCurrentUserId()
-                if (clean.isNotBlank() && currentUserId.isNotBlank()) {
+                if (clean.isNotBlank()) {
+                    pendingAction = null
                     scope.launch {
-                        val addResult = chatRepository.addContactByUsername(currentUserId, clean)
-                        if (addResult.isSuccess) {
-                            val added = addResult.getOrNull()!!
-                            ttsService.speak("Contacto @${added.username} agregado exitosamente a tu lista.")
-                        } else {
-                            val added = chatRepository.addContact(name = clean, phone = result.contactPhone ?: "")
-                            ttsService.speak("Contacto ${added.name} guardado en tu lista.")
+                        if (currentUserId.isNotBlank()) {
+                            val addResult = chatRepository.addContactByUsername(currentUserId, clean)
+                            if (addResult.isSuccess) {
+                                val added = addResult.getOrNull()!!
+                                ttsService.speak("Contacto @${added.username} agregado exitosamente a tu lista.")
+                                return@launch
+                            }
                         }
+                        val added = chatRepository.addContact(name = clean, phone = result.contactPhone ?: "")
+                        ttsService.speak("Contacto ${added.name} guardado en tu lista.")
                     }
                 } else {
-                    val added = chatRepository.addContact(name = clean.ifBlank { "Nuevo Contacto" }, phone = result.contactPhone ?: "")
-                    Log.i("VoiceAssistantManager", "Contacto agregado: ${added.name}")
+                    // Cuando aún no hay nombre (la IA está preguntándolo), no crear ningún contacto falso
+                    pendingAction = "ADD_CONTACT"
                 }
             }
 
@@ -273,16 +307,19 @@ class VoiceAssistantManager(
 
     fun stopAssistant() {
         speechService.stopListening()
+        ttsService.stop()
+        dialogueHistory.clear()
+        pendingAction = null
         _state.update {
             it.copy(
                 mode = AssistantMode.STANDBY,
-                feedbackMessage = "Toca para hablarle al Asistente IA"
+                feedbackMessage = "Asistente de Voz IA"
             )
         }
     }
 
     fun destroy() {
         isDestroyed = true
-        speechService.stopListening()
+        stopAssistant()
     }
 }

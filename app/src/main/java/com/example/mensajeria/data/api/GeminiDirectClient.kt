@@ -43,15 +43,22 @@ object GeminiDirectClient {
 
     /**
      * Procesa comandos de voz en lenguaje natural y devuelve una acción estructurada
-     * para el Asistente de Voz Accesible de la UNCP.
+     * para el Asistente de Voz Accesible de la UNCP. Soporta diálogos multi-turno.
      */
     suspend fun processVoiceCommand(
         spokenText: String,
-        context: VoiceAssistantContext
+        context: VoiceAssistantContext,
+        dialogueHistory: List<Pair<String, String>> = emptyList()
     ): VoiceCommandResult = withContext(Dispatchers.IO) {
+        val historySection = if (dialogueHistory.isNotEmpty()) {
+            "Historial previo de la conversación reciente:\n" +
+            dialogueHistory.joinToString("\n") { "Usuario: \"${it.first}\"\nAsistente: \"${it.second}\"" } + "\n\n"
+        } else ""
+
         val prompt = """
             Eres el Asistente de Voz Inteligente de la app de mensajería accesible para personas con discapacidad visual de la Unión Nacional de Ciegos del Perú (UNCP).
-            El usuario te dijo: "$spokenText"
+            $historySection
+            El usuario ahora te dijo: "$spokenText"
 
             Contexto actual de la aplicación:
             - Pantalla actual: ${context.currentScreen}
@@ -59,6 +66,10 @@ object GeminiDirectClient {
             - Contactos disponibles: ${context.contacts.joinToString(", ")}
             ${if (context.activeChatContact != null) "- Chat abierto con: ${context.activeChatContact}" else ""}
             ${if (context.recentMessages.isNotEmpty()) "- Mensajes recientes: ${context.recentMessages.joinToString(" | ")}" else ""}
+
+            REGLA CLAVE DE CONVERSACIÓN:
+            Si en el historial previo le preguntaste al usuario por un nombre, mensaje o dato (por ejemplo: "¿Qué nombre deseas ponerle al contacto?"), interpreta lo que el usuario acaba de decir como respuesta directa a esa pregunta.
+            Por ejemplo, si le preguntaste "¿Qué nombre deseas ponerle?", y ahora el usuario dice "Juan", la acción debe ser "ADD_CONTACT" con "contactName": "Juan".
 
             Analiza la intención del usuario y responde ÚNICAMENTE un objeto JSON válido con este formato:
             {

@@ -17,7 +17,16 @@ class TextToSpeechService(
     private val onInitSuccess: () -> Unit = {}
 ) : TextToSpeech.OnInitListener {
 
-    private var tts: TextToSpeech? = TextToSpeech(context, this)
+    private var tts: TextToSpeech? = null
+
+    init {
+        tts = try {
+            TextToSpeech(context, this, "com.google.android.tts")
+        } catch (_: Exception) {
+            TextToSpeech(context, this)
+        }
+    }
+
     private var isReady: Boolean = false
     private var pendingText: String? = null
     private var pendingOnDone: (() -> Unit)? = null
@@ -30,7 +39,19 @@ class TextToSpeechService(
             if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
                 tts?.language = Locale.forLanguageTag("es-ES")
             }
-            tts?.setSpeechRate(0.95f) // Ritmo ligeramente pausado para máxima inteligibilidad auditiva
+
+            try {
+                val availableVoices = tts?.voices?.filter { v ->
+                    v.locale.language == "es" && !v.isNetworkConnectionRequired
+                } ?: emptyList()
+                val bestVoice = availableVoices.maxByOrNull { it.quality }
+                if (bestVoice != null) {
+                    tts?.voice = bestVoice
+                }
+            } catch (_: Exception) {}
+
+            tts?.setPitch(1.0f)
+            tts?.setSpeechRate(0.92f) // Ritmo natural y claro que respeta las pausas de comas y puntos
             isReady = true
             mainHandler.post {
                 onInitSuccess()
@@ -50,6 +71,43 @@ class TextToSpeechService(
         }
     }
 
+    /**
+     * Da formato al texto para máxima inteligibilidad y entonación natural en español:
+     * - Antepone signos de apertura interrogativa (¿) y exclamativa (¡) para que el motor
+     *   de síntesis eleve la curva de tono melódico en preguntas.
+     * - Garantiza pausas claras en comas (,), puntos (.) y dos puntos (:).
+     * - Pronuncia correctamente identificadores @ como 'arroba'.
+     */
+    fun formatForNaturalSpeech(text: String): String {
+        var formatted = text.trim()
+        if (formatted.isBlank()) return ""
+
+        // Pronunciar @ como 'arroba'
+        formatted = formatted.replace("@", " arroba ")
+
+        // Separar cláusulas para asegurar entonación de preguntas en español
+        val sentences = formatted.split(Regex("(?<=[.?!\\n])\\s+"))
+        formatted = sentences.joinToString(" ") { sentence ->
+            var s = sentence.trim()
+            if (s.endsWith("?") && !s.startsWith("¿")) {
+                s = "¿$s"
+            } else if (s.endsWith("!") && !s.startsWith("¡")) {
+                s = "¡$s"
+            }
+            s
+        }
+
+        // Respetar pausas claras en signos de puntuación
+        formatted = formatted
+            .replace(",", ", ")
+            .replace(":", ": ")
+            .replace(";", "; ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        return formatted
+    }
+
     fun speak(
         text: String,
         queueMode: Int = TextToSpeech.QUEUE_FLUSH,
@@ -57,9 +115,11 @@ class TextToSpeechService(
     ) {
         if (text.isBlank()) return
 
-        // Si el motor de Google aún se está conectando, guardamos el mensaje para decirlo apenas conecte
+        val formattedText = formatForNaturalSpeech(text)
+
+        // Si el motor aún se está conectando, guardamos el mensaje para decirlo apenas conecte
         if (!isReady) {
-            pendingText = text
+            pendingText = formattedText
             pendingOnDone = onDone
             return
         }
@@ -78,7 +138,7 @@ class TextToSpeechService(
         })
 
         val params = Bundle()
-        tts?.speak(text, queueMode, params, utteranceId)
+        tts?.speak(formattedText, queueMode, params, utteranceId)
     }
 
     fun stop() {

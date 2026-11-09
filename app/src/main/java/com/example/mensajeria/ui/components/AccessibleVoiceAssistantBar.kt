@@ -138,26 +138,15 @@ fun AccessibleVoiceAssistantBar(
 
             Spacer(modifier = Modifier.size(14.dp))
 
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = statusTitle,
-                    color = if (state.mode == AssistantMode.PROCESSING) PureBlack else AccessibleYellow,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = state.feedbackMessage,
-                    color = if (state.mode == AssistantMode.PROCESSING) PureBlack.copy(alpha = 0.85f) else Color.White.copy(alpha = 0.9f),
-                    fontSize = 12.5.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            Text(
+                text = statusTitle,
+                color = if (state.mode == AssistantMode.PROCESSING) PureBlack else AccessibleYellow,
+                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
