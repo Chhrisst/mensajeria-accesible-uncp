@@ -4,6 +4,13 @@ Esta carpeta contiene utilidades en lote (`.bat`) para facilitar el trabajo en e
 
 ---
 
+### 0. `configurar_servidor_y_api.bat` (Configuración de Credenciales)
+* **¿Qué hace?**
+  1. Permite ingresar o actualizar la **IP del servidor VPS** y la **clave de Google Gemini** sin tocar código.
+  2. Guarda la configuración en `local.properties` (y `backend/.env`).
+  3. Si solo escribes la IP (ej. `150.136.172.213`), la formatea automáticamente a `http://150.136.172.213:8000/`.
+  4. Muestra los valores actuales y permite reemplazarlos si se vuelve a abrir.
+
 ### 1. `1_verificar_entorno.bat`
 * **¿Qué hace?**
   1. Verifica que Git esté instalado.
