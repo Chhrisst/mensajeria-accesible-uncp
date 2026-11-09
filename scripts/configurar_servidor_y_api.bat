@@ -42,7 +42,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "} else { Write-Host '  API Key Gemini  : (No configurada)' -ForegroundColor DarkGray };" ^
     "Write-Host '';" ^
     "Write-Host '1. SERVIDOR BACKEND / VPS' -ForegroundColor Green;" ^
-    "Write-Host '   Ingresa la direccion IP (ej. 150.136.172.213) o la URL completa:';" ^
+    "Write-Host '   Ingresa la direccion IP o URL del servidor (ej. 192.168.1.100 o https://mi-servidor.com):';" ^
     "Write-Host '   (Presiona ENTER para mantener el valor actual)';" ^
     "$rawUrl = Read-Host '   > ';" ^
     "if ($rawUrl -and $rawUrl.Trim().Length -gt 0) {" ^

@@ -8,7 +8,7 @@ Esta carpeta contiene utilidades en lote (`.bat`) para facilitar el trabajo en e
 * **¿Qué hace?**
   1. Permite ingresar o actualizar la **IP del servidor VPS** y la **clave de Google Gemini** sin tocar código.
   2. Guarda la configuración en `local.properties` (y `backend/.env`).
-  3. Si solo escribes la IP (ej. `150.136.172.213`), la formatea automáticamente a `http://150.136.172.213:8000/`.
+  3. Si solo escribes la IP (ej. `192.168.1.100`), la formatea automáticamente a `http://192.168.1.100:8000/`.
   4. Muestra los valores actuales y permite reemplazarlos si se vuelve a abrir.
 
 ### 1. `1_verificar_entorno.bat`
@@ -32,3 +32,10 @@ Esta carpeta contiene utilidades en lote (`.bat`) para facilitar el trabajo en e
   1. Detecta qué archivos has modificado o agregado.
   2. **Primera confirmación:** Te pide confirmar si deseas crear un commit para la rama actual e ingresar un mensaje descriptivo.
   3. **Segunda confirmación crítica (Doble confirmación):** Antes de enviar el código a GitHub, te vuelve a pedir confirmación explícita para evitar subir cambios por error o sobreescribir código en la rama equivocada.
+
+### 4. `4_sincronizar_main.bat` (Verificar y Descargar Actualizaciones)
+* **¿Qué hace?**
+  1. Consulta a GitHub (`git fetch origin main`) sin alterar tus archivos locales de trabajo.
+  2. Compara tu copia local con `origin/main` y te dice cuántos commits nuevos existen.
+  3. Si hay cambios en GitHub, te muestra la lista de commits nuevos y te pregunta si deseas descargarlos (`git pull origin main`).
+  4. Si tu copia ya está actualizada, te confirma que todo está al día.
