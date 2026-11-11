@@ -17,3 +17,5 @@ local.properties
 *.env
 *.pem
 *.key
+scripts/iniciar_claude_code.bat
+

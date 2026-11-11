@@ -39,10 +39,3 @@ Esta carpeta contiene utilidades en lote (`.bat`) para facilitar el trabajo en e
   2. Compara tu copia local con `origin/main` y te dice cuántos commits nuevos existen.
   3. Si hay cambios en GitHub, te muestra la lista de commits nuevos y te pregunta si deseas descargarlos (`git pull origin main`).
   4. Si tu copia ya está actualizada, te confirma que todo está al día.
-
-### 5. `iniciar_claude_code.bat` (Asistente de Desarrollo con Claude Code)
-* **¿Qué hace?**
-  1. Verifica que Claude Code (`@anthropic-ai/claude-code`) esté disponible en el sistema.
-  2. Inicia la sesión interactiva de Claude Code en la raíz del proyecto.
-  3. Proporciona el flujo para autenticarse con cuenta de Anthropic (Claude Pro / Team / API Key) en el navegador.
-  4. Claude Code lee automáticamente `CLAUDE.md` con las instrucciones de arquitectura, comandos de Gradle y directrices de accesibilidad.
