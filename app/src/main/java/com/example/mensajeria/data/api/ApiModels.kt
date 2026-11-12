@@ -25,9 +25,11 @@ data class ApiAddContactRequest(
     @SerializedName("contact_username") val contactUsername: String
 )
 
+// NOTA DE ROBUSTEZ: Gson ignora la nulabilidad de Kotlin (crea los objetos con Unsafe), por lo que
+// cualquier campo que el backend pueda omitir o enviar como null se declara nullable y se valida al mapear.
 data class ApiUserResponse(
-    @SerializedName("id") val id: String,
-    @SerializedName("name") val name: String,
+    @SerializedName("id") val id: String?,
+    @SerializedName("name") val name: String?,
     @SerializedName("username") val username: String? = null,
     @SerializedName("email") val email: String? = null,
     @SerializedName("phone") val phone: String? = null,
@@ -41,13 +43,13 @@ data class ApiUserResponse(
 )
 
 data class ApiContactResponse(
-    @SerializedName("id") val id: String,
-    @SerializedName("name") val name: String,
+    @SerializedName("id") val id: String?,
+    @SerializedName("name") val name: String?,
     @SerializedName("username") val username: String? = null,
-    @SerializedName("email") val email: String,
+    @SerializedName("email") val email: String? = null,
     @SerializedName("phone") val phone: String? = null,
-    @SerializedName("role") val role: String,
-    @SerializedName("visual_condition") val visualCondition: String,
+    @SerializedName("role") val role: String? = null,
+    @SerializedName("visual_condition") val visualCondition: String? = null,
     @SerializedName("last_message") val lastMessage: String? = null,
     @SerializedName("last_message_time") val lastMessageTime: String? = null,
     @SerializedName("unread_count") val unreadCount: Int? = 0,
@@ -64,15 +66,15 @@ data class ApiSendMessageRequest(
 )
 
 data class ApiMessageResponse(
-    @SerializedName("id") val id: String,
-    @SerializedName("sender_id") val senderId: String,
-    @SerializedName("receiver_id") val receiverId: String,
+    @SerializedName("id") val id: String?,
+    @SerializedName("sender_id") val senderId: String?,
+    @SerializedName("receiver_id") val receiverId: String?,
     @SerializedName("content") val content: String?,
-    @SerializedName("message_type") val messageType: String,
+    @SerializedName("message_type") val messageType: String?,
     @SerializedName("audio_url") val audioUrl: String? = null,
     @SerializedName("audio_duration_seconds") val audioDurationSeconds: Int = 0,
     @SerializedName("is_read") val isRead: Boolean = false,
-    @SerializedName("created_at") val createdAt: String,
+    @SerializedName("created_at") val createdAt: String? = null,
     @SerializedName("is_from_me") val isFromMe: Boolean = false
 )
 
@@ -93,6 +95,6 @@ data class ApiAiRefineSpeechRequest(
 )
 
 data class ApiAiResponse(
-    @SerializedName("result") val result: String,
+    @SerializedName("result") val result: String?,
     @SerializedName("status") val status: String = "success"
 )

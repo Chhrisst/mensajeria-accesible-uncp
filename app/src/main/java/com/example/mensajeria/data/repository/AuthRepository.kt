@@ -4,6 +4,7 @@ import android.content.Context
 import com.example.mensajeria.data.model.UserProfile
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,8 +44,8 @@ class AuthRepository(private val context: Context? = null) {
             val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val json = prefs.getString(KEY_ACTIVE_USER, null)
             if (!json.isNullOrBlank()) {
-                val savedUser = gson.fromJson(json, UserProfile::class.java)
-                if (savedUser != null && savedUser.id.isNotBlank()) {
+                val savedUser = sanitizeUser(gson.fromJson(json, UserProfile::class.java))
+                if (savedUser != null) {
                     _currentUser.value = savedUser
                 }
             }
@@ -70,8 +71,8 @@ class AuthRepository(private val context: Context? = null) {
             val json = prefs.getString(KEY_REGISTERED_USERS, null)
             if (!json.isNullOrBlank()) {
                 val type = object : TypeToken<List<UserProfile>>() {}.type
-                val savedList: List<UserProfile> = gson.fromJson(json, type)
-                savedList.reversed().forEach { savedUser ->
+                val savedList: List<UserProfile?> = gson.fromJson(json, type) ?: emptyList()
+                savedList.mapNotNull { sanitizeUser(it) }.reversed().forEach { savedUser ->
                     val cleanDesc = if (savedUser.hasDisability) "Con discapacidad" else "Sin discapacidad"
                     val standardized = savedUser.copy(
                         role = "Usuario",
@@ -84,6 +85,34 @@ class AuthRepository(private val context: Context? = null) {
                 }
             }
         } catch (_: Exception) {}
+    }
+
+    /**
+     * Gson ignora la nulabilidad de Kotlin: un JSON guardado por una versión anterior de la app (o dañado)
+     * puede traer campos null en propiedades no anulables. Sin esta limpieza, findUserByQuery()
+     * lanzaba NullPointerException (p. ej. en user.email.lowercase()) durante el login por voz.
+     */
+    @Suppress("USELESS_CAST")
+    private fun sanitizeUser(raw: UserProfile?): UserProfile? {
+        if (raw == null) return null
+        val id = (raw.id as String?)?.takeIf { it.isNotBlank() } ?: return null
+        val name = (raw.name as String?)?.takeIf { it.isNotBlank() } ?: return null
+        val defaults = UserProfile(id = id, name = name)
+        return UserProfile(
+            id = id,
+            name = name,
+            username = (raw.username as String?) ?: defaults.username,
+            email = (raw.email as String?) ?: defaults.email,
+            phone = (raw.phone as String?) ?: defaults.phone,
+            dni = (raw.dni as String?) ?: defaults.dni,
+            birthDate = (raw.birthDate as String?) ?: defaults.birthDate,
+            code = (raw.code as String?) ?: defaults.code,
+            sidePattern = (raw.sidePattern as String?) ?: defaults.sidePattern,
+            role = (raw.role as String?) ?: defaults.role,
+            description = (raw.description as String?) ?: defaults.description,
+            hasDisability = raw.hasDisability,
+            visualCondition = (raw.visualCondition as String?) ?: defaults.visualCondition
+        )
     }
 
     fun persistUser(user: UserProfile) {
@@ -194,12 +223,13 @@ class AuthRepository(private val context: Context? = null) {
             val response = com.example.mensajeria.data.api.RetrofitClient.api.login(
                 com.example.mensajeria.data.api.ApiLoginRequest(query, passwordOrPin)
             )
-            if (response.isSuccessful && response.body() != null) {
-                val b = response.body()!!
+            val b = response.body()
+            val remoteId = b?.id?.takeIf { it.isNotBlank() }
+            if (response.isSuccessful && b != null && remoteId != null) {
                 val desc = if (b.hasDisability) "Con discapacidad" else "Sin discapacidad"
                 val profile = UserProfile(
-                    id = b.id,
-                    name = b.name,
+                    id = remoteId,
+                    name = b.name?.takeIf { it.isNotBlank() } ?: b.username ?: query.trim(),
                     username = b.username ?: "",
                     email = b.email ?: "",
                     phone = b.phone ?: "",
@@ -225,6 +255,8 @@ class AuthRepository(private val context: Context? = null) {
                     Result.failure(Exception("Credenciales inválidas."))
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             val localUser = findUserByQuery(query)
             if (localUser != null && (passwordOrPin.isBlank() || verifyPin(localUser, passwordOrPin))) {
@@ -259,11 +291,12 @@ class AuthRepository(private val context: Context? = null) {
                 visualCondition = desc
             )
             val response = com.example.mensajeria.data.api.RetrofitClient.api.register(req)
-            if (response.isSuccessful && response.body() != null) {
-                val b = response.body()!!
+            val b = response.body()
+            val remoteId = b?.id?.takeIf { it.isNotBlank() }
+            if (response.isSuccessful && b != null && remoteId != null) {
                 val profile = UserProfile(
-                    id = b.id,
-                    name = b.name,
+                    id = remoteId,
+                    name = b.name?.takeIf { it.isNotBlank() } ?: form.fullName.ifBlank { "Nuevo Socio" },
                     username = b.username ?: "",
                     email = b.email ?: emailToSend,
                     phone = b.phone ?: "",
@@ -284,6 +317,8 @@ class AuthRepository(private val context: Context? = null) {
                 val local = registerUser(form)
                 Result.success(local)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             val local = registerUser(form)
             Result.success(local)

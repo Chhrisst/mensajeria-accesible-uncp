@@ -16,6 +16,8 @@ import com.example.mensajeria.data.repository.AuthRepository
 import com.example.mensajeria.domain.service.SpeechService
 import com.example.mensajeria.domain.service.TextToSpeechService
 import com.example.mensajeria.domain.service.VibrationService
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -60,6 +62,9 @@ class AuthViewModel(
 
     private val _registerStep = MutableStateFlow(RegisterStep.METHOD_SELECTION)
     val registerStep: StateFlow<RegisterStep> = _registerStep.asStateFlow()
+
+    // Evita lanzar varias peticiones de login/registro por toques repetidos mientras la red responde
+    private var isAuthRequestInFlight = false
 
     fun speakWelcome() {
         val welcome = "Bienvenido a Asistente de Voz. Inicia sesión para continuar y acceder a tus mensajes, o toca el micrófono central para activar la entrada por voz."
@@ -128,19 +133,26 @@ class AuthViewModel(
             viewModelScope.launch {
                 try {
                     val response = RetrofitClient.api.getUsers()
-                    if (response.isSuccessful && response.body() != null) {
-                        val clean = recognizedName.trim().lowercase()
-                        val match = response.body()!!.firstOrNull { u ->
-                            val uName = u.name.trim().lowercase()
+                    val users = response.body()
+                    val clean = recognizedName.trim().lowercase()
+                    if (response.isSuccessful && users != null && clean.isNotBlank()) {
+                        val match = users.firstOrNull { u ->
+                            // Ignorar registros incompletos: un nombre vacío coincidía con CUALQUIER frase
+                            // (cadena.contains("") == true) y se seleccionaba una cuenta equivocada.
+                            val uName = u?.name?.trim()?.lowercase().orEmpty()
+                            if (u?.id.isNullOrBlank() || uName.isBlank()) return@firstOrNull false
                             uName.contains(clean) || clean.contains(uName) ||
                             clean.replace(" ", "").contains(uName.replace(" ", "")) ||
                             uName.replace(" ", "").contains(clean.replace(" ", ""))
                         }
-                        if (match != null) {
+                        val matchId = match?.id
+                        val matchName = match?.name
+                        if (match != null && matchId != null && matchName != null) {
                             val desc = if (match.hasDisability) "Con discapacidad" else "Sin discapacidad"
                             val profile = UserProfile(
-                                id = match.id,
-                                name = match.name,
+                                id = matchId,
+                                name = matchName,
+                                username = match.username ?: "",
                                 email = match.email ?: "",
                                 phone = match.phone ?: "",
                                 dni = match.dni ?: "",
@@ -156,7 +168,13 @@ class AuthViewModel(
                             return@launch
                         }
                     }
-                } catch (_: Exception) {}
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w("AuthViewModel", "No se pudo consultar usuarios remotos: ${e.message}")
+                    triggerVoiceError("No hay conexión con el servidor para buscar la cuenta \"$recognizedName\". Verifique su internet e intente nuevamente.")
+                    return@launch
+                }
                 triggerVoiceError("No se encontró ninguna cuenta asociada a: \"$recognizedName\".")
             }
         }
@@ -192,6 +210,12 @@ class AuthViewModel(
                 processPinInput(user, recognizedPinText)
             },
             onError = {
+                // El micrófono ya se cerró: no dejar la pantalla mostrando "Escuchando PIN..." indefinidamente
+                _voiceAuthState.update { state ->
+                    if (state.phase == VoiceAuthPhase.LISTENING_PIN) {
+                        state.copy(feedbackMessage = "No se escuchó el PIN. Toque la pantalla para ingresar los dígitos o intente de nuevo.")
+                    } else state
+                }
                 ttsService.speak("No se escuchó el PIN. Puede tocar la pantalla para ingresar los dígitos o pulsar Ayuda.")
             }
         )
@@ -302,8 +326,14 @@ class AuthViewModel(
         onSuccess: (UserProfile) -> Unit,
         onError: (String) -> Unit
     ) {
+        if (isAuthRequestInFlight) return
+        isAuthRequestInFlight = true
         viewModelScope.launch {
-            val result = authRepository.loginRemote(userOrEmail, passwordOrPin)
+            val result = try {
+                authRepository.loginRemote(userOrEmail, passwordOrPin)
+            } finally {
+                isAuthRequestInFlight = false
+            }
             result.onSuccess { found ->
                 vibrationService.vibrateSuccess()
                 authRepository.loginWithProfile(found)
@@ -324,8 +354,14 @@ class AuthViewModel(
         onSuccess: (UserProfile) -> Unit,
         onError: (String) -> Unit
     ) {
+        if (isAuthRequestInFlight) return
+        isAuthRequestInFlight = true
         viewModelScope.launch {
-            val result = authRepository.registerRemote(form)
+            val result = try {
+                authRepository.registerRemote(form)
+            } finally {
+                isAuthRequestInFlight = false
+            }
             result.onSuccess { newUser ->
                 vibrationService.vibrateSuccess()
                 authRepository.loginWithProfile(newUser)
@@ -389,9 +425,15 @@ class AuthViewModel(
     }
 
     fun submitRegistration(onSuccess: (UserProfile) -> Unit) {
+        if (isAuthRequestInFlight) return
+        isAuthRequestInFlight = true
         viewModelScope.launch {
             vibrationService.vibrateSuccess()
-            val result = authRepository.registerRemote(_registrationForm.value)
+            val result = try {
+                authRepository.registerRemote(_registrationForm.value)
+            } finally {
+                isAuthRequestInFlight = false
+            }
             val newUser = result.getOrElse { authRepository.registerUser(_registrationForm.value) }
             _uiState.update { it.copy(authenticatedUser = newUser) }
             setRegisterStep(RegisterStep.COMPLETED)

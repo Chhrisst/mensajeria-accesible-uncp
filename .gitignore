@@ -18,4 +18,6 @@ local.properties
 *.pem
 *.key
 scripts/iniciar_claude_code.bat
+.kotlin/
+
 

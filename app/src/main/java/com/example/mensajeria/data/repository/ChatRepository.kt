@@ -1,13 +1,16 @@
 package com.example.mensajeria.data.repository
 
 import android.content.Context
+import android.util.Log
 import com.example.mensajeria.data.api.ApiAddContactRequest
+import com.example.mensajeria.data.api.ApiContactResponse
 import com.example.mensajeria.data.api.ApiSendMessageRequest
 import com.example.mensajeria.data.api.RetrofitClient
 import com.example.mensajeria.data.model.Contact
 import com.example.mensajeria.data.model.Message
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,12 +26,20 @@ import kotlinx.coroutines.flow.update
 class ChatRepository(private val context: Context? = null) {
 
     companion object {
+        private const val TAG = "ChatRepository"
         private const val PREFS_NAME = "uncp_chat_prefs"
         private var sharedContext: Context? = null
     }
 
     private val gson = Gson()
     private var currentActiveUserId: String = ""
+
+    // Conversación cuyos mensajes están actualmente en _messages (userId_contactId)
+    @Volatile private var currentConversationKey: String = ""
+
+    // Mensajes enviados desde este dispositivo que el servidor aún no confirmó (en vuelo o fallidos).
+    // Se conservan al refrescar desde el servidor para que no "desaparezcan" de la conversación.
+    private val unsyncedMessageIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
     private val _contacts = MutableStateFlow<List<Contact>>(emptyList())
     val contacts: StateFlow<List<Contact>> = _contacts.asStateFlow()
@@ -64,12 +75,60 @@ class ChatRepository(private val context: Context? = null) {
             val json = prefs.getString(getContactsPrefKey(userId), null)
             if (!json.isNullOrBlank()) {
                 val type = object : TypeToken<List<Contact>>() {}.type
-                val savedList: List<Contact> = gson.fromJson(json, type)
-                // Sanitizar: Eliminar contactos temporales o ficticios ("c_...")
-                val validContacts = savedList.filter { !it.id.startsWith("c_") && it.id.isNotBlank() }
+                val savedList: List<Contact?> = gson.fromJson(json, type) ?: emptyList()
+                // Sanitizar: Eliminar contactos temporales o ficticios ("c_...") y registros corruptos.
+                // Gson no respeta la nulabilidad de Kotlin: un JSON antiguo o dañado puede traer campos null
+                // que luego provocarían NullPointerException en la UI o en el asistente de voz.
+                val validContacts = savedList.mapNotNull { sanitizeContact(it) }
+                    .filter { !it.id.startsWith("c_") }
                 _contacts.value = validContacts
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudieron leer los contactos guardados: ${e.message}")
+        }
+    }
+
+    private fun sanitizeContact(raw: Contact?): Contact? {
+        if (raw == null) return null
+        val id = (raw.id as String?)?.takeIf { it.isNotBlank() } ?: return null
+        val username = (raw.username as String?) ?: ""
+        val name = (raw.name as String?)?.takeIf { it.isNotBlank() } ?: username.ifBlank { return null }
+        return Contact(
+            id = id,
+            name = name,
+            username = username,
+            description = (raw.description as String?) ?: "",
+            isOnline = raw.isOnline
+        )
+    }
+
+    private fun sanitizeMessage(raw: Message?): Message? {
+        if (raw == null) return null
+        val id = (raw.id as String?)?.takeIf { it.isNotBlank() } ?: return null
+        return Message(
+            id = id,
+            text = (raw.text as String?) ?: "",
+            isOutgoing = raw.isOutgoing,
+            timestamp = raw.timestamp,
+            senderName = (raw.senderName as String?) ?: if (raw.isOutgoing) "Tú" else "Contacto",
+            isVoiceNote = raw.isVoiceNote,
+            voiceDurationSeconds = raw.voiceDurationSeconds
+        )
+    }
+
+    /** Mapea un contacto del backend; devuelve null si le faltan datos imprescindibles. */
+    private fun mapApiContact(c: ApiContactResponse?): Contact? {
+        if (c == null) return null
+        val id = c.id?.takeIf { it.isNotBlank() } ?: return null
+        val username = c.username ?: ""
+        val name = c.name?.takeIf { it.isNotBlank() } ?: username.ifBlank { return null }
+        return Contact(
+            id = id,
+            name = name,
+            username = username,
+            description = c.lastMessage ?: c.visualCondition ?: "",
+            isOnline = c.isOnline ?: false
+        )
     }
 
     private fun persistContacts(userId: String) {
@@ -94,24 +153,20 @@ class ChatRepository(private val context: Context? = null) {
 
         return try {
             val response = RetrofitClient.api.getContacts(userId)
-            if (response.isSuccessful && response.body() != null) {
-                val apiContacts = response.body()!!
-                val mapped = apiContacts.map { c ->
-                    Contact(
-                        id = c.id,
-                        name = c.name,
-                        username = c.username ?: "",
-                        description = c.lastMessage ?: c.visualCondition,
-                        isOnline = c.isOnline ?: false
-                    )
-                }
+            val apiContacts = response.body()
+            if (response.isSuccessful && apiContacts != null) {
+                val mapped = apiContacts.mapNotNull { mapApiContact(it) }
                 _contacts.value = mapped
                 persistContacts(userId)
                 mapped
             } else {
+                Log.w(TAG, "getContacts respondió HTTP ${response.code()}")
                 _contacts.value
             }
-        } catch (_: Exception) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Sin conexión al sincronizar contactos: ${e.message}")
             _contacts.value
         }
     }
@@ -131,15 +186,8 @@ class ChatRepository(private val context: Context? = null) {
                     contactUsername = clean
                 )
             )
-            if (response.isSuccessful && response.body() != null) {
-                val c = response.body()!!
-                val newContact = Contact(
-                    id = c.id,
-                    name = c.name,
-                    username = c.username ?: "",
-                    description = c.lastMessage ?: c.visualCondition,
-                    isOnline = c.isOnline ?: false
-                )
+            val newContact = if (response.isSuccessful) mapApiContact(response.body()) else null
+            if (newContact != null) {
                 _contacts.update { current ->
                     val filtered = current.filter { it.id != newContact.id && !it.id.startsWith("c_") }
                     listOf(newContact) + filtered
@@ -163,8 +211,10 @@ class ChatRepository(private val context: Context? = null) {
                 }
                 Result.failure(Exception(finalMessage))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception("Sin conexión con el servidor. No se pudo agregar al usuario @$clean."))
         }
     }
 
@@ -232,17 +282,28 @@ class ChatRepository(private val context: Context? = null) {
     // ==========================================
 
     fun loadPersistedMessages(userId: String, contactId: String): List<Message> {
+        val conversationKey = getMessagesPrefKey(userId, contactId)
+        val isNewConversation = conversationKey != currentConversationKey
+        currentConversationKey = conversationKey
+        // Al cambiar de conversación se limpia la lista: antes, si el nuevo contacto no tenía caché,
+        // se seguían mostrando (y leyendo en voz alta) los mensajes del contacto anterior.
+        if (isNewConversation) {
+            _messages.value = emptyList()
+        }
         val ctx = getEffectiveContext() ?: return emptyList()
         try {
             val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val json = prefs.getString(getMessagesPrefKey(userId, contactId), null)
+            val json = prefs.getString(conversationKey, null)
             if (!json.isNullOrBlank()) {
                 val type = object : TypeToken<List<Message>>() {}.type
-                val savedList: List<Message> = gson.fromJson(json, type)
-                _messages.value = savedList
-                return savedList
+                val savedList: List<Message?> = gson.fromJson(json, type) ?: emptyList()
+                val clean = savedList.mapNotNull { sanitizeMessage(it) }
+                _messages.value = clean
+                return clean
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudieron leer los mensajes guardados: ${e.message}")
+        }
         return emptyList()
     }
 
@@ -255,20 +316,34 @@ class ChatRepository(private val context: Context? = null) {
         } catch (_: Exception) {}
     }
 
-    suspend fun loadMessagesFromRemote(userId: String, contactId: String): List<Message> {
+    /**
+     * @param loadLocalFirst true al abrir la conversación (muestra la caché al instante);
+     *        false en el sondeo periódico, para no releer disco cada 4 s ni provocar parpadeos.
+     */
+    suspend fun loadMessagesFromRemote(
+        userId: String,
+        contactId: String,
+        loadLocalFirst: Boolean = true
+    ): List<Message> {
         if (userId.isBlank() || contactId.isBlank()) return _messages.value
 
-        // Cargar primero localmente para disponibilidad inmediata
-        loadPersistedMessages(userId, contactId)
+        val conversationKey = getMessagesPrefKey(userId, contactId)
+        if (loadLocalFirst || conversationKey != currentConversationKey) {
+            // Cargar primero localmente para disponibilidad inmediata
+            loadPersistedMessages(userId, contactId)
+        }
 
         return try {
             val response = RetrofitClient.api.getMessages(userId, contactId)
-            if (response.isSuccessful && response.body() != null) {
-                val apiMsgs = response.body()!!
-                val mapped = apiMsgs.map { m ->
+            val apiMsgs = response.body()
+            // Si mientras esperábamos la red el usuario abrió otra conversación, descartar esta respuesta
+            if (conversationKey != currentConversationKey) return _messages.value
+            if (response.isSuccessful && apiMsgs != null) {
+                val mapped = apiMsgs.mapNotNull { m ->
+                    val id = m?.id?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
                     val isFromMe = m.isFromMe || (m.senderId == userId)
                     Message(
-                        id = m.id,
+                        id = id,
                         text = m.content ?: "",
                         isOutgoing = isFromMe,
                         senderName = if (isFromMe) "Tú" else "Contacto",
@@ -276,13 +351,21 @@ class ChatRepository(private val context: Context? = null) {
                         voiceDurationSeconds = m.audioDurationSeconds
                     )
                 }
-                _messages.value = mapped
+                val serverIds = mapped.mapTo(HashSet()) { it.id }
+                // Conservar los mensajes locales aún no confirmados por el servidor
+                val pendingLocal = _messages.value.filter { it.id in unsyncedMessageIds && it.id !in serverIds }
+                val merged = mapped + pendingLocal
+                _messages.value = merged
                 persistMessages(userId, contactId)
-                mapped
+                merged
             } else {
+                Log.w(TAG, "getMessages respondió HTTP ${response.code()}")
                 _messages.value
             }
-        } catch (_: Exception) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Sin conexión al cargar mensajes: ${e.message}")
             _messages.value
         }
     }
@@ -302,8 +385,11 @@ class ChatRepository(private val context: Context? = null) {
             voiceDurationSeconds = voiceDurationSeconds
         )
         // Añadir a la UI de inmediato (optimistic update)
-        _messages.update { it + localMessage }
-        persistMessages(userId, contactId)
+        unsyncedMessageIds.add(localMessage.id)
+        if (getMessagesPrefKey(userId, contactId) == currentConversationKey) {
+            _messages.update { it + localMessage }
+            persistMessages(userId, contactId)
+        }
 
         return try {
             val request = ApiSendMessageRequest(
@@ -314,16 +400,30 @@ class ChatRepository(private val context: Context? = null) {
                 audioDurationSeconds = voiceDurationSeconds
             )
             val response = RetrofitClient.api.sendMessage(request)
-            if (response.isSuccessful && response.body() != null) {
-                val b = response.body()!!
-                val confirmedMessage = localMessage.copy(id = b.id)
+            if (response.isSuccessful) {
+                val serverId = response.body()?.id?.takeIf { it.isNotBlank() }
+                val confirmedMessage = if (serverId != null) localMessage.copy(id = serverId) else localMessage
+                // Sustituir el id local por el del servidor para que el siguiente refresco no lo duplique
+                if (serverId != null) {
+                    _messages.update { list -> list.map { if (it.id == localMessage.id) confirmedMessage else it } }
+                    if (getMessagesPrefKey(userId, contactId) == currentConversationKey) {
+                        persistMessages(userId, contactId)
+                    }
+                }
+                unsyncedMessageIds.remove(localMessage.id)
                 Result.success(confirmedMessage)
             } else {
-                Result.success(localMessage)
+                // Antes se devolvía success aunque el servidor rechazara el mensaje, y la app anunciaba
+                // "Mensaje enviado" a un usuario que no puede verificarlo visualmente.
+                Log.w(TAG, "sendMessage respondió HTTP ${response.code()}")
+                Result.failure(Exception("El servidor no aceptó el mensaje (HTTP ${response.code()})."))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            // Guardado localmente en caso de fallo de red
-            Result.success(localMessage)
+            // Queda guardado localmente (y visible) en caso de fallo de red
+            Log.w(TAG, "Sin conexión al enviar mensaje: ${e.message}")
+            Result.failure(Exception("Sin conexión con el servidor. El mensaje quedó guardado en el teléfono."))
         }
     }
 
@@ -334,6 +434,15 @@ class ChatRepository(private val context: Context? = null) {
             senderName = "Tú",
             isVoiceNote = isVoiceNote,
             voiceDurationSeconds = voiceDurationSeconds
+        )
+        _messages.update { it + newMessage }
+    }
+
+    fun receiveMessage(text: String, senderName: String = "Remitente") {
+        val newMessage = Message(
+            text = text,
+            isOutgoing = false,
+            senderName = senderName
         )
         _messages.update { it + newMessage }
     }

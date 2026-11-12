@@ -78,34 +78,6 @@ class MensajeriaUnitTests {
     }
 
     @Test
-    fun testAuthRepository_PredefinedUsersExist() {
-        val authRepo = com.example.mensajeria.data.repository.AuthRepository()
-        assertTrue("Debe contener al menos 4 usuarios predefinidos de la UNCP", authRepo.predefinedUsers.size >= 4)
-        assertTrue(authRepo.predefinedUsers.any { it.name.contains("Christian") })
-        assertTrue("Debe contener a Romell Rivera en los perfiles predefinidos de prueba", authRepo.predefinedUsers.any { it.name.contains("Romell") })
-    }
-
-    @Test
-    fun testAuthRepository_LoginByVoiceInputNameOrCode() {
-        val authRepo = com.example.mensajeria.data.repository.AuthRepository()
-
-        val userByName = authRepo.loginByInput("Quiero ingresar como Christian Beteta")
-        assertTrue("Debe identificar usuario por dictado de nombre", userByName != null && userByName.name.contains("Christian"))
-
-        val userByCode = authRepo.loginByInput("123")
-        assertTrue("Debe identificar usuario por PIN", userByCode != null && userByCode.code == "123")
-    }
-
-    @Test
-    fun testAuthRepository_VerifyPin() {
-        val authRepo = com.example.mensajeria.data.repository.AuthRepository()
-        val romell = authRepo.findUserByQuery("Romell Rivera")
-        assertTrue("Debe encontrar la cuenta de Romell Rivera", romell != null)
-        assertTrue("PIN correcto debe ser validado", authRepo.verifyPin(romell!!, "123"))
-        assertTrue("PIN incorrecto debe ser rechazado", !authRepo.verifyPin(romell, "999"))
-    }
-
-    @Test
     fun testAuthRepository_RegisterNewUserFromForm() {
         val authRepo = com.example.mensajeria.data.repository.AuthRepository()
         val form = com.example.mensajeria.data.model.RegistrationForm(
@@ -120,16 +92,61 @@ class MensajeriaUnitTests {
         val registeredUser = authRepo.registerUser(form)
         assertEquals("Ana María Quispe", registeredUser.name)
         assertEquals("456", registeredUser.code)
-        assertEquals("Baja visión", registeredUser.visualCondition)
+        assertEquals("Con discapacidad", registeredUser.visualCondition)
 
         val searched = authRepo.findUserByQuery("Ana María")
         assertTrue("El usuario recién registrado debe poder ser encontrado", searched != null)
     }
 
     @Test
+    fun testAuthRepository_LoginByVoiceInputNameOrCode() {
+        val authRepo = com.example.mensajeria.data.repository.AuthRepository()
+        val form = com.example.mensajeria.data.model.RegistrationForm(
+            fullName = "Christian Beteta",
+            dni = "12345678",
+            phone = "999888777",
+            email = "christian@uncp.edu.pe",
+            hasDisability = false,
+            pin = "123"
+        )
+        authRepo.registerUser(form)
+
+        val userByName = authRepo.loginByInput("Quiero ingresar como Christian Beteta")
+        assertTrue("Debe identificar usuario por dictado de nombre", userByName != null && userByName.name.contains("Christian"))
+
+        val userByCode = authRepo.loginByInput("123")
+        assertTrue("Debe identificar usuario por PIN", userByCode != null && userByCode.code == "123")
+    }
+
+    @Test
+    fun testAuthRepository_VerifyPin() {
+        val authRepo = com.example.mensajeria.data.repository.AuthRepository()
+        val form = com.example.mensajeria.data.model.RegistrationForm(
+            fullName = "Romell Rivera",
+            dni = "87654321",
+            phone = "987654321",
+            email = "romell@uncp.edu.pe",
+            hasDisability = true,
+            pin = "123"
+        )
+        val romell = authRepo.registerUser(form)
+        assertTrue("Debe encontrar la cuenta de Romell Rivera", romell != null)
+        assertTrue("PIN correcto debe ser validado", authRepo.verifyPin(romell, "123"))
+        assertTrue("PIN incorrecto debe ser rechazado", !authRepo.verifyPin(romell, "999"))
+    }
+
+    @Test
     fun testAuthRepository_LogoutClearsUser() {
         val authRepo = com.example.mensajeria.data.repository.AuthRepository()
-        val user = authRepo.predefinedUsers.first()
+        val form = com.example.mensajeria.data.model.RegistrationForm(
+            fullName = "Usuario Prueba",
+            dni = "11223344",
+            phone = "911223344",
+            email = "test@uncp.edu.pe",
+            hasDisability = false,
+            pin = "1234"
+        )
+        val user = authRepo.registerUser(form)
         authRepo.loginWithProfile(user)
         assertEquals(user, authRepo.currentUser.value)
 

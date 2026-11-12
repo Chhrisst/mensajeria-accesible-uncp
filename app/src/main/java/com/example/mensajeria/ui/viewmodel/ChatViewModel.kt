@@ -15,11 +15,15 @@ import com.example.mensajeria.domain.service.SmartReplyService
 import com.example.mensajeria.domain.service.SpeechService
 import com.example.mensajeria.domain.service.TextToSpeechService
 import com.example.mensajeria.domain.service.VibrationService
+import android.util.Log
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * ViewModel principal que orquesta la arquitectura MVVM con Unidirectional Data Flow (UDF).
@@ -29,7 +33,8 @@ import kotlinx.coroutines.launch
  */
 class ChatViewModel(
     context: Context,
-    private val repository: ChatRepository = ChatRepository(),
+    // Público para que MainActivity reutilice la misma instancia tras recrearse (rotación, cambio de fuente, etc.)
+    val repository: ChatRepository = ChatRepository(),
     private val smartReplyService: SmartReplyService = SmartReplyService()
 ) : ViewModel() {
 
@@ -38,7 +43,14 @@ class ChatViewModel(
     val soundService = com.example.mensajeria.domain.service.SoundNotificationService(context)
     var isDisabilityMode: Boolean = true
     var currentUserId: String = ""
-    private var pollingJob: kotlinx.coroutines.Job? = null
+    private var pollingJob: Job? = null
+    private var messagesJob: Job? = null
+    private var refineJob: Job? = null
+
+    private companion object {
+        const val TAG = "ChatViewModel"
+        const val AI_TIMEOUT_MS = 12_000L
+    }
 
     val ttsService = TextToSpeechService(context) {
         // Inicializado correctamente
@@ -96,18 +108,18 @@ class ChatViewModel(
                 }
                 ttsService.speak("Optimizando texto...")
 
-                // Perfeccionamiento y puntuación inteligente con Gemini
-                viewModelScope.launch {
-                    val refined = try {
-                        val response = RetrofitClient.api.refineSpeech(ApiAiRefineSpeechRequest(rawText = recognizedText))
-                        if (response.isSuccessful && !response.body()?.result.isNullOrBlank()) {
-                            response.body()!!.result
-                        } else {
-                            GeminiDirectClient.refineSpeech(recognizedText)
-                        }
-                    } catch (_: Exception) {
-                        GeminiDirectClient.refineSpeech(recognizedText)
-                    }
+                // Perfeccionamiento y puntuación inteligente con Gemini.
+                // Con tope de tiempo: si la IA no responde, se usa el texto tal cual se dictó en lugar de
+                // dejar la pantalla en "Optimizando con IA..." indefinidamente.
+                refineJob?.cancel()
+                refineJob = viewModelScope.launch {
+                    val refined = requestAiText(
+                        backendCall = { RetrofitClient.api.refineSpeech(ApiAiRefineSpeechRequest(rawText = recognizedText)).let { r -> if (r.isSuccessful) r.body()?.result else null } },
+                        geminiFallback = { GeminiDirectClient.refineSpeech(recognizedText) }
+                    ) ?: recognizedText
+
+                    // Si el usuario canceló mientras se optimizaba, no reabrir la confirmación
+                    if (_uiState.value.voiceState != VoiceState.CONFIRMING) return@launch
 
                     _uiState.update {
                         it.copy(
@@ -139,6 +151,7 @@ class ChatViewModel(
      */
     fun stopListening() {
         speechService.stopListening()
+        refineJob?.cancel()
         if (_uiState.value.voiceState == VoiceState.LISTENING) {
             _uiState.update {
                 it.copy(
@@ -156,23 +169,53 @@ class ChatViewModel(
         val textToSend = _uiState.value.pendingSpokenText
         if (textToSend.isNotBlank()) {
             vibrationService.vibrateSuccess()
-            val contactId = _uiState.value.contact.id
-            if (currentUserId.isNotBlank() && contactId.isNotBlank()) {
-                viewModelScope.launch {
-                    repository.sendMessageRemote(currentUserId, contactId, textToSend)
-                }
-            } else {
-                repository.sendMessage(textToSend)
-            }
-
+            refineJob?.cancel()
             _uiState.update {
                 it.copy(
                     voiceState = VoiceState.IDLE,
                     pendingSpokenText = "",
-                    feedbackMessage = "Mensaje enviado con éxito."
+                    feedbackMessage = "Enviando mensaje..."
                 )
             }
-            ttsService.speak("Mensaje enviado: $textToSend")
+            sendAndAnnounce(textToSend, successSpeech = "Mensaje enviado: $textToSend", alwaysSpeak = true)
+        }
+    }
+
+    /**
+     * Envía al servidor y anuncia el resultado REAL. Antes se anunciaba "Mensaje enviado" antes de
+     * conocer la respuesta, aunque no hubiera conexión.
+     */
+    private fun sendAndAnnounce(
+        text: String,
+        successSpeech: String,
+        alwaysSpeak: Boolean,
+        isVoiceNote: Boolean = false,
+        voiceDurationSeconds: Int = 0
+    ) {
+        val contactId = _uiState.value.contact.id
+        if (currentUserId.isBlank() || contactId.isBlank()) {
+            repository.sendMessage(text, isVoiceNote = isVoiceNote, voiceDurationSeconds = voiceDurationSeconds)
+            if (alwaysSpeak || isDisabilityMode) ttsService.speak(successSpeech)
+            return
+        }
+        viewModelScope.launch {
+            val result = repository.sendMessageRemote(
+                currentUserId,
+                contactId,
+                text,
+                isVoiceNote = isVoiceNote,
+                voiceDurationSeconds = voiceDurationSeconds
+            )
+            if (result.isSuccess) {
+                _uiState.update { it.copy(feedbackMessage = "Mensaje enviado con éxito.") }
+                if (alwaysSpeak || isDisabilityMode) ttsService.speak(successSpeech)
+            } else {
+                vibrationService.vibrateError()
+                val msg = "No se pudo enviar el mensaje. Revisa tu conexión a internet. Quedó guardado en el teléfono."
+                _uiState.update { it.copy(feedbackMessage = msg) }
+                // El fallo se anuncia siempre: el usuario debe saber que su mensaje no llegó.
+                ttsService.speak(msg)
+            }
         }
     }
 
@@ -180,6 +223,7 @@ class ChatViewModel(
      * Cancela el mensaje pendiente para volver a dictar.
      */
     fun cancelPendingMessage() {
+        refineJob?.cancel()
         vibrationService.vibrateError()
         _uiState.update {
             it.copy(
@@ -197,23 +241,15 @@ class ChatViewModel(
      */
     fun selectSmartReply(reply: String) {
         vibrationService.vibrateSuccess()
-        val contactId = _uiState.value.contact.id
-        if (currentUserId.isNotBlank() && contactId.isNotBlank()) {
-            viewModelScope.launch {
-                repository.sendMessageRemote(currentUserId, contactId, reply)
-            }
-        } else {
-            repository.sendMessage(reply)
-        }
-
+        refineJob?.cancel()
         _uiState.update {
             it.copy(
                 voiceState = VoiceState.IDLE,
                 pendingSpokenText = "",
-                feedbackMessage = "Respuesta rápida enviada: $reply"
+                feedbackMessage = "Enviando respuesta rápida..."
             )
         }
-        ttsService.speak("Respuesta rápida enviada: $reply")
+        sendAndAnnounce(reply, successSpeech = "Respuesta rápida enviada: $reply", alwaysSpeak = true)
     }
 
     /**
@@ -222,17 +258,8 @@ class ChatViewModel(
     fun sendTextMessage(text: String) {
         if (text.isNotBlank()) {
             vibrationService.vibrateSuccess()
-            val contactId = _uiState.value.contact.id
-            if (currentUserId.isNotBlank() && contactId.isNotBlank()) {
-                viewModelScope.launch {
-                    repository.sendMessageRemote(currentUserId, contactId, text.trim())
-                }
-            } else {
-                repository.sendMessage(text.trim())
-            }
-            if (isDisabilityMode) {
-                ttsService.speak("Mensaje enviado: ${text.trim()}")
-            }
+            val clean = text.trim()
+            sendAndAnnounce(clean, successSpeech = "Mensaje enviado: $clean", alwaysSpeak = false)
         }
     }
 
@@ -241,24 +268,14 @@ class ChatViewModel(
      */
     fun sendVoiceNote(durationSeconds: Int = 4) {
         vibrationService.vibrateSuccess()
-        val contactId = _uiState.value.contact.id
         val content = "Nota de voz grabada (${durationSeconds}s)"
-        if (currentUserId.isNotBlank() && contactId.isNotBlank()) {
-            viewModelScope.launch {
-                repository.sendMessageRemote(
-                    currentUserId,
-                    contactId,
-                    content,
-                    isVoiceNote = true,
-                    voiceDurationSeconds = durationSeconds
-                )
-            }
-        } else {
-            repository.sendMessage(content, isVoiceNote = true, voiceDurationSeconds = durationSeconds)
-        }
-        if (isDisabilityMode) {
-            ttsService.speak("Nota de voz de $durationSeconds segundos enviada.")
-        }
+        sendAndAnnounce(
+            content,
+            successSpeech = "Nota de voz de $durationSeconds segundos enviada.",
+            alwaysSpeak = false,
+            isVoiceNote = true,
+            voiceDurationSeconds = durationSeconds
+        )
     }
 
     /**
@@ -290,15 +307,14 @@ class ChatViewModel(
         ttsService.speak("Generando resumen con Inteligencia Artificial...")
 
         viewModelScope.launch {
-            val summary = try {
-                val response = RetrofitClient.api.summarizeMessage(ApiAiSummarizeRequest(text = lastMsg.text))
-                if (response.isSuccessful && !response.body()?.result.isNullOrBlank()) {
-                    response.body()!!.result
-                } else {
-                    GeminiDirectClient.summarize(lastMsg.text)
-                }
-            } catch (_: Exception) {
-                GeminiDirectClient.summarize(lastMsg.text)
+            val summary = requestAiText(
+                backendCall = { RetrofitClient.api.summarizeMessage(ApiAiSummarizeRequest(text = lastMsg.text)).let { r -> if (r.isSuccessful) r.body()?.result else null } },
+                geminiFallback = { GeminiDirectClient.summarize(lastMsg.text) }
+            )
+            if (summary == null) {
+                vibrationService.vibrateError()
+                ttsService.speak("No se pudo generar el resumen. Revisa tu conexión a internet e inténtalo de nuevo.")
+                return@launch
             }
 
             soundService.playSuccessSound()
@@ -308,7 +324,15 @@ class ChatViewModel(
     }
 
     fun setContact(contact: Contact, userId: String = "") {
-        _uiState.update { it.copy(contact = contact) }
+        refineJob?.cancel()
+        _uiState.update {
+            it.copy(
+                contact = contact,
+                voiceState = VoiceState.IDLE,
+                pendingSpokenText = "",
+                smartReplies = emptyList()
+            )
+        }
         if (userId.isNotBlank()) {
             currentUserId = userId
         }
@@ -326,8 +350,10 @@ class ChatViewModel(
     fun loadMessages() {
         val contactId = _uiState.value.contact.id
         if (currentUserId.isNotBlank() && contactId.isNotBlank()) {
-            viewModelScope.launch {
-                repository.loadMessagesFromRemote(currentUserId, contactId)
+            // Cancelar una carga anterior: si respondía tarde, podía pisar la conversación recién abierta
+            messagesJob?.cancel()
+            messagesJob = viewModelScope.launch {
+                repository.loadMessagesFromRemote(currentUserId, contactId, loadLocalFirst = true)
             }
         }
     }
@@ -339,7 +365,7 @@ class ChatViewModel(
                 kotlinx.coroutines.delay(4000)
                 val contactId = _uiState.value.contact.id
                 if (currentUserId.isNotBlank() && contactId.isNotBlank()) {
-                    repository.loadMessagesFromRemote(currentUserId, contactId)
+                    repository.loadMessagesFromRemote(currentUserId, contactId, loadLocalFirst = false)
                 }
             }
         }
@@ -348,6 +374,34 @@ class ChatViewModel(
     fun stopPolling() {
         pollingJob?.cancel()
         pollingJob = null
+        messagesJob?.cancel()
+        messagesJob = null
+    }
+
+    /**
+     * Pide texto a la IA: primero al backend, luego directo a Gemini, con un tope de tiempo total.
+     * Devuelve null si nada respondió a tiempo (el llamador decide el texto de respaldo).
+     */
+    private suspend fun requestAiText(
+        backendCall: suspend () -> String?,
+        geminiFallback: suspend () -> String?
+    ): String? = withTimeoutOrNull(AI_TIMEOUT_MS) {
+        val fromBackend = try {
+            backendCall()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Backend de IA no disponible: ${e.message}")
+            null
+        }
+        fromBackend?.takeIf { it.isNotBlank() } ?: try {
+            geminiFallback()?.takeIf { it.isNotBlank() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Gemini no disponible: ${e.message}")
+            null
+        }
     }
 
     override fun onCleared() {

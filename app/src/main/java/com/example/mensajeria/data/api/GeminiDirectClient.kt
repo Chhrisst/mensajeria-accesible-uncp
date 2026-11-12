@@ -1,13 +1,22 @@
 package com.example.mensajeria.data.api
 
+import android.util.Log
 import com.example.mensajeria.data.model.VoiceAssistantContext
 import com.example.mensajeria.data.model.VoiceCommandResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import java.io.IOException
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
@@ -22,9 +31,14 @@ object GeminiDirectClient {
     private const val PRIMARY_MODEL = "gemini-flash-lite-latest"
     private const val FALLBACK_MODEL = "gemini-3.8-flash"
 
+    private const val TAG = "GeminiDirectClient"
+
+    // callTimeout acota cada intento: sin él, primario + respaldo podían sumar ~48 s
+    // con el asistente "Consultando con Inteligencia Artificial..." colgado.
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(12, TimeUnit.SECONDS)
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .callTimeout(12, TimeUnit.SECONDS)
         .build()
 
     suspend fun summarize(text: String): String = withContext(Dispatchers.IO) {
@@ -105,11 +119,16 @@ object GeminiDirectClient {
         )
     }
 
-    private fun generateContent(prompt: String, isJson: Boolean = false): String? {
+    private suspend fun generateContent(prompt: String, isJson: Boolean = false): String? {
+        if (API_KEY.isBlank()) {
+            Log.e(TAG, "GEMINI_API_KEY vacía en local.properties: se omite la consulta a Gemini.")
+            return null
+        }
         val models = listOf(PRIMARY_MODEL, FALLBACK_MODEL)
         for (model in models) {
             try {
-                val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$API_KEY"
+                // La clave va en cabecera (no en la URL) para que no aparezca en logs de red/proxies.
+                val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"
                 val jsonPayload = JSONObject().apply {
                     put("contents", JSONArray().apply {
                         put(JSONObject().apply {
@@ -133,25 +152,50 @@ object GeminiDirectClient {
                 val requestBody = jsonPayload.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
                 val request = Request.Builder()
                     .url(url)
+                    .header("x-goog-api-key", API_KEY)
                     .post(requestBody)
                     .build()
 
-                val response = httpClient.newCall(request).execute()
-                if (response.isSuccessful) {
-                    val bodyStr = response.body?.string() ?: continue
-                    val root = JSONObject(bodyStr)
-                    val candidates = root.optJSONArray("candidates")
-                    if (candidates != null && candidates.length() > 0) {
-                        val content = candidates.getJSONObject(0).optJSONObject("content")
-                        val parts = content?.optJSONArray("parts")
-                        if (parts != null && parts.length() > 0) {
-                            val text = parts.getJSONObject(0).optString("text").trim()
-                            if (text.isNotBlank()) return text
-                        }
+                // `use` cierra SIEMPRE la respuesta (antes las respuestas 4xx/5xx quedaban abiertas
+                // y agotaban el pool de conexiones tras varios fallos).
+                val text = httpClient.newCall(request).await().use { response ->
+                    if (!response.isSuccessful) {
+                        Log.w(TAG, "Gemini ($model) respondió HTTP ${response.code}")
+                        return@use null
                     }
+                    val bodyStr = response.body?.string() ?: return@use null
+                    val candidates = JSONObject(bodyStr).optJSONArray("candidates")
+                    if (candidates == null || candidates.length() == 0) return@use null
+                    val parts = candidates.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
+                    if (parts == null || parts.length() == 0) return@use null
+                    parts.optJSONObject(0)?.optString("text")?.trim()
                 }
-            } catch (_: Exception) {}
+                if (!text.isNullOrBlank()) return text
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Fallo consultando Gemini ($model): ${e.javaClass.simpleName} ${e.message}")
+            }
         }
         return null
+    }
+
+    /**
+     * Ejecuta la llamada de forma cancelable: si la corrutina se cancela (timeout del asistente,
+     * usuario que detiene la consulta), se aborta también la petición HTTP en curso.
+     */
+    private suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
+        cont.invokeOnCancellation {
+            try { cancel() } catch (_: Exception) {}
+        }
+        enqueue(object : Callback {
+            override fun onResponse(call: Call, response: Response) {
+                if (cont.isActive) cont.resume(response) else response.close()
+            }
+
+            override fun onFailure(call: Call, e: IOException) {
+                if (cont.isActive) cont.resumeWithException(e)
+            }
+        })
     }
 }

@@ -16,6 +16,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import com.example.mensajeria.data.model.Contact
 import com.example.mensajeria.data.model.UserProfile
 import com.example.mensajeria.data.repository.AuthRepository
@@ -69,8 +71,25 @@ class MainActivity : ComponentActivity() {
     private lateinit var authViewModel: AuthViewModel
     private lateinit var chatViewModel: ChatViewModel
     private lateinit var voiceAssistantManager: VoiceAssistantManager
-    private val authRepository by lazy { AuthRepository(applicationContext) }
-    private val chatRepository by lazy { ChatRepository(applicationContext) }
+    // El repositorio se obtiene del ViewModel para que sobreviva junto a él a la recreación
+    // de la Activity (rotación, cambio de tamaño de fuente o de tema).
+    private val chatRepository: ChatRepository get() = chatViewModel.repository
+
+    /**
+     * Antes los ViewModels se instanciaban con su constructor: en cada recreación de la Activity se creaba
+     * un par nuevo y el anterior nunca recibía onCleared(), dejando vivos su motor TTS, su SpeechRecognizer
+     * y el bucle de sondeo de mensajes (uno más por cada giro de pantalla).
+     */
+    private val viewModelFactory = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = when {
+            modelClass.isAssignableFrom(AuthViewModel::class.java) ->
+                AuthViewModel(applicationContext, AuthRepository(applicationContext)) as T
+            modelClass.isAssignableFrom(ChatViewModel::class.java) ->
+                ChatViewModel(applicationContext, ChatRepository(applicationContext)) as T
+            else -> throw IllegalArgumentException("ViewModel desconocido: ${modelClass.name}")
+        }
+    }
 
     private var onPermissionGrantedCallback: (() -> Unit)? = null
 
@@ -85,8 +104,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        authViewModel = AuthViewModel(applicationContext, authRepository)
-        chatViewModel = ChatViewModel(applicationContext, chatRepository)
+        val provider = ViewModelProvider(this, viewModelFactory)
+        authViewModel = provider[AuthViewModel::class.java]
+        chatViewModel = provider[ChatViewModel::class.java]
         voiceAssistantManager = VoiceAssistantManager(
             context = applicationContext,
             chatRepository = chatRepository,
