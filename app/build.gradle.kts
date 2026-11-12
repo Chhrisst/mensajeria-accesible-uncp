@@ -8,9 +8,7 @@ plugins {
 
 android {
     namespace = "com.example.mensajeria"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk = 35
 
     val localProperties = Properties()
     val localPropertiesFile = rootProject.file("local.properties")
@@ -22,8 +20,8 @@ android {
 
     defaultConfig {
         applicationId = "com.example.mensajeria"
-        minSdk = 24
-        targetSdk = 36
+        minSdk = 26
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 

@@ -4,6 +4,7 @@
 
 $projectRoot = (Get-Item -Path "$PSScriptRoot\..").FullName
 Set-Location $projectRoot
+$env:PATH = $env:PATH.Replace('"', '')
 
 Write-Host "=====================================================================" -ForegroundColor Cyan
 Write-Host "   MENSAJERIA UNCP IA - DIAGNOSTICO Y REPARACION AUTOMATICA" -ForegroundColor Cyan
