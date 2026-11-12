@@ -89,7 +89,9 @@ class SpeechService(private val context: Context) {
                             SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Tiempo de espera agotado. No se escuchó voz."
                             SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Falta permiso de micrófono."
                             SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Error de conexión de red para reconocimiento."
-                            else -> "No se pudo completar el reconocimiento. Código: $error"
+                            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "El micrófono está ocupado. Intenta nuevamente."
+                            11 /* ERROR_SERVER_DISCONNECTED */ -> "El servicio de voz se desconectó. Toca la pantalla para reintentar."
+                            else -> "No se pudo completar el reconocimiento. Toca la pantalla para intentar de nuevo."
                         }
                         onError(errorMsg)
                     }

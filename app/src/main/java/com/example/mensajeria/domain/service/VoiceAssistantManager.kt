@@ -4,7 +4,9 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.example.mensajeria.data.api.ApiUserResponse
 import com.example.mensajeria.data.api.GeminiDirectClient
+import com.example.mensajeria.data.api.RetrofitClient
 import com.example.mensajeria.data.model.Contact
 import com.example.mensajeria.data.model.VoiceAssistantContext
 import com.example.mensajeria.data.model.VoiceCommandResult
@@ -267,9 +269,9 @@ class VoiceAssistantManager(
                         if (dialogueHistory.size > 6) {
                             dialogueHistory.removeAt(0)
                         }
-                        // Esperar 400ms a que el hardware libere el audio y reactivar el micrófono para la respuesta del usuario
+                        // Esperar 800ms a que el hardware libere el audio y reactivar el micrófono para la respuesta del usuario
                         mainHandler.removeCallbacks(reactivateRunnable)
-                        mainHandler.postDelayed(reactivateRunnable, 400)
+                        mainHandler.postDelayed(reactivateRunnable, 800)
                     } else {
                         resetToStandby(clearDialogue = true)
                     }
@@ -333,28 +335,42 @@ class VoiceAssistantManager(
                     pendingAction = null
                     scope.launch {
                         if (currentUserId.isNotBlank()) {
-                            val addResult = chatRepository.addContactByUsername(currentUserId, clean)
+                            // 1. Intentar resolver si el nombre dictado coincide con algún usuario del sistema
+                            var targetUsername = clean
+                            try {
+                                val usersResp = RetrofitClient.api.getUsers()
+                                val usersList: List<ApiUserResponse>? = usersResp.body()
+                                if (usersResp.isSuccessful && !usersList.isNullOrEmpty()) {
+                                    val cleanLower = clean.lowercase().trim()
+                                    val matched = usersList.firstOrNull { u ->
+                                        val uName = (u.name ?: "").lowercase().trim()
+                                        val uUser = (u.username ?: "").lowercase().trim()
+                                        uUser == cleanLower || uName == cleanLower ||
+                                        (uName.isNotBlank() && (uName.contains(cleanLower) || cleanLower.contains(uName)))
+                                    }
+                                    if (matched != null && !matched.username.isNullOrBlank()) {
+                                        targetUsername = matched.username
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "No se pudo consultar lista de usuarios previa: ${e.message}")
+                            }
+
+                            val addResult = chatRepository.addContactByUsername(currentUserId, targetUsername)
                             addResult.fold(
                                 onSuccess = { added ->
-                                    val displayName = if (added.username.isNotBlank()) "@${added.username}" else added.name
+                                    val displayName = if (added.name.isNotBlank()) added.name else "@${added.username}"
                                     ttsService.speak("Contacto $displayName agregado exitosamente a tu lista.")
                                 },
                                 onFailure = { error ->
-                                    val errorMsg = error.message ?: ""
-                                    val speechError = if (errorMsg.contains("no existe", ignoreCase = true) || errorMsg.contains("404") || errorMsg.contains("No se encontró", ignoreCase = true)) {
-                                        "El usuario arroba $clean no existe en el sistema UNCP. Por favor, verifica el nombre de usuario e intenta nuevamente."
-                                    } else if (errorMsg.contains("mismo", ignoreCase = true)) {
-                                        "No puedes agregarte a ti mismo como contacto."
-                                    } else if (errorMsg.contains("ya existe", ignoreCase = true) || errorMsg.contains("ya está", ignoreCase = true)) {
-                                        "El usuario arroba $clean ya está en tu lista de contactos."
-                                    } else {
-                                        "No se pudo agregar al usuario arroba $clean. Verifica que exista en la plataforma UNCP."
-                                    }
-                                    ttsService.speak(speechError)
+                                    // Si no está registrado en el backend o falló la red, guardarlo como contacto local en la agenda
+                                    val local = chatRepository.addContact(clean)
+                                    ttsService.speak("Contacto ${local.name} guardado en tu lista de contactos.")
                                 }
                             )
                         } else {
-                            ttsService.speak("Debes iniciar sesión para agregar contactos.")
+                            val local = chatRepository.addContact(clean)
+                            ttsService.speak("Contacto ${local.name} guardado en tu lista de contactos.")
                         }
                     }
                 } else {

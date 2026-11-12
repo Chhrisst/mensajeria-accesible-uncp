@@ -74,11 +74,13 @@ def add_contact(payload: AddContactRequest, db: Session = Depends(get_db)):
     if not clean_username:
         raise HTTPException(status_code=400, detail="Debe especificar un nombre de usuario.")
 
-    # Buscar usuario destino por nombre de usuario único (@handle) o correo electrónico
+    # Buscar usuario destino por nombre de usuario único (@handle), correo o nombre completo
     target_user = db.query(User).filter(
         or_(
             func.lower(User.username) == clean_username,
-            func.lower(User.email) == clean_username
+            func.lower(User.email) == clean_username,
+            func.lower(User.name) == clean_username,
+            func.lower(User.name).ilike(f"%{clean_username}%")
         )
     ).first()
 
