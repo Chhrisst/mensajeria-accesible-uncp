@@ -308,7 +308,7 @@ fun StandardRegisterScreen(
                     } else if (isUsernameAvailableState == true) {
                         Text("✓ @${username.trim().removePrefix("@")} está disponible", color = whatsappGreen)
                     } else {
-                        Text("Identificador único para que otros te encuentren (ej: @carlos20)", color = TextSecondaryGray)
+                        Text("Identificador único para que otros te encuentren", color = TextSecondaryGray)
                     }
                 },
                 enabled = !isLoading,

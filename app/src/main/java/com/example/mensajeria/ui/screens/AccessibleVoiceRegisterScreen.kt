@@ -112,7 +112,7 @@ fun AccessibleVoiceRegisterScreen(
         isListening = true
 
         authViewModel.ttsService.speak(
-            "Nombre recibido: $registeredName. Ahora, habla después del tono y di tu nombre de usuario único, por ejemplo carlos20 o charly.",
+            "Nombre recibido: $registeredName. Ahora, habla después del tono y di tu nombre de usuario único.",
             onDone = {
                 coroutineScope.launch {
                     delay(600)
@@ -360,16 +360,7 @@ fun AccessibleVoiceRegisterScreen(
                         textAlign = TextAlign.Center
                     )
 
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Text(
-                        text = "Ejemplo: carlos20 o charly",
-                        fontSize = 15.sp,
-                        color = TextSecondaryGray,
-                        textAlign = TextAlign.Center
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
                         text = feedbackText,

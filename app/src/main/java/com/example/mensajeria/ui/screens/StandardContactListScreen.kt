@@ -100,7 +100,7 @@ fun StandardContactListScreen(
                     OutlinedTextField(
                         value = newContactUsername,
                         onValueChange = { newContactUsername = it },
-                        placeholder = { Text("@usuario_ejemplo", color = TextSecondaryGray) },
+                        placeholder = { Text("@usuario", color = TextSecondaryGray) },
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = whatsappGreen,
