@@ -103,7 +103,7 @@ fun AccessibleWelcomeScreen(
                     fontSize = 14.sp,
                     modifier = Modifier
                         .exploreTarget(id = "welcome_change_mode", label = "Cambiar modo")
-                        .clickable {
+                        .clickable(role = Role.Button) {
                             playAccessibleClickFeedback(context)
                             onChangeModeClick()
                         }

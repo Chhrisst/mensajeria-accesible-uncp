@@ -247,7 +247,7 @@ class AuthRepository(private val context: Context? = null) {
                 Result.success(profile)
             } else {
                 val localUser = findUserByQuery(query)
-                if (localUser != null && (passwordOrPin.isBlank() || verifyPin(localUser, passwordOrPin))) {
+                if (localUser != null && passwordOrPin.isNotBlank() && verifyPin(localUser, passwordOrPin)) {
                     _currentUser.value = localUser
                     saveActiveSession(localUser)
                     Result.success(localUser)
@@ -259,7 +259,7 @@ class AuthRepository(private val context: Context? = null) {
             throw e
         } catch (e: Exception) {
             val localUser = findUserByQuery(query)
-            if (localUser != null && (passwordOrPin.isBlank() || verifyPin(localUser, passwordOrPin))) {
+            if (localUser != null && passwordOrPin.isNotBlank() && verifyPin(localUser, passwordOrPin)) {
                 _currentUser.value = localUser
                 saveActiveSession(localUser)
                 Result.success(localUser)

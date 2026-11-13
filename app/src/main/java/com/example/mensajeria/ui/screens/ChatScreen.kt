@@ -78,7 +78,7 @@ fun ChatScreen(
                             modifier = Modifier.semantics { heading() }
                         )
                         Text(
-                            text = "En línea • UNCP Accesible",
+                            text = "En línea • Modo accesible",
                             fontSize = 14.sp,
                             color = HighContrastYellow
                         )

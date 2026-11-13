@@ -92,7 +92,7 @@ fun MainScreen(
                     .fillMaxWidth()
                     .padding(bottom = 14.dp)
                     .semantics {
-                        this.contentDescription = "Sesión iniciada como ${currentUser?.name ?: "Socio UNCP"}. ${currentUser?.role ?: ""}."
+                        this.contentDescription = "Sesión iniciada como ${currentUser?.name ?: "Usuario"}. ${currentUser?.role ?: ""}."
                     }
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -103,7 +103,7 @@ fun MainScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = currentUser?.name ?: "Socio de la UNCP",
+                        text = currentUser?.name ?: "Usuario",
                         color = TextPrimary,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
@@ -162,7 +162,7 @@ fun MainScreen(
 
             // Botón directo a la conversación principal de la UNCP
             AccessibleButton(
-                text = "💬 ABRIR CHAT UNCP",
+                text = "💬 ABRIR CHAT",
                 contentDescription = "Abrir directamente la conversación de mensajería adaptada",
                 onClick = {
                     contacts.firstOrNull()?.let { onSelectContact(it) }

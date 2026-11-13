@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -96,7 +97,7 @@ fun StandardLoginScreen(
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier
-                            .clickable(onClick = onChangeMode)
+                            .clickable(role = Role.Button, onClick = onChangeMode)
                             .padding(4.dp)
                     )
                 }
@@ -264,7 +265,7 @@ fun StandardLoginScreen(
                         textDecoration = TextDecoration.Underline,
                         modifier = Modifier
                             .padding(horizontal = 12.dp)
-                            .clickable(onClick = onGoToRegister)
+                            .clickable(role = Role.Button, onClick = onGoToRegister)
                     )
                     HorizontalDivider(modifier = Modifier.weight(1f), color = Color(0xFF2A3942))
                 }

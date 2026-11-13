@@ -300,7 +300,7 @@ fun VoicePinScreen(
                             .clip(CircleShape)
                             .background(DarkCardBackground)
                             .border(1.5.dp, AccessibleYellow, CircleShape)
-                            .clickable { onDigitClick(digit) },
+                            .clickable(onClickLabel = "Ingresar dígito", role = Role.Button) { onDigitClick(digit) },
                         contentAlignment = Alignment.Center
                     ) {
                         Text(

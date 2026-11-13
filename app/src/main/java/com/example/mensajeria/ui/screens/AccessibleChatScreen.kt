@@ -291,7 +291,7 @@ fun AccessibleChatScreen(
                                     .weight(1f)
                                     .height(56.dp)
                                     .exploreTarget(id = "chat_confirm_cancel", label = "Cancelar")
-                                    .clickable { chatViewModel.cancelPendingMessage() },
+                                    .clickable(role = Role.Button) { chatViewModel.cancelPendingMessage() },
                                 shape = RoundedCornerShape(14.dp),
                                 colors = CardDefaults.cardColors(containerColor = PureBlack),
                                 border = BorderStroke(2.dp, PureBlack)
@@ -313,7 +313,7 @@ fun AccessibleChatScreen(
                                     .weight(1f)
                                     .height(56.dp)
                                     .exploreTarget(id = "chat_confirm_send", label = "Enviar")
-                                    .clickable { chatViewModel.confirmAndSendMessage() },
+                                    .clickable(role = Role.Button) { chatViewModel.confirmAndSendMessage() },
                                 shape = RoundedCornerShape(14.dp),
                                 colors = CardDefaults.cardColors(containerColor = PureBlack),
                                 border = BorderStroke(2.dp, PureBlack)

@@ -722,7 +722,10 @@ private fun SummaryRow(
     label: String,
     value: String
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.semantics(mergeDescendants = true) {}
+    ) {
         Box(
             modifier = Modifier
                 .size(42.dp)

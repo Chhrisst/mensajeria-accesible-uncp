@@ -54,7 +54,12 @@ object RetrofitClient {
             .build()
     }
 
-    val api: ApiService by lazy {
+    // Punto de inyección solo para pruebas unitarias (simular IOException/timeouts sin red real).
+    @Volatile internal var apiOverride: ApiService? = null
+
+    val api: ApiService get() = apiOverride ?: realApi
+
+    private val realApi: ApiService by lazy {
         Retrofit.Builder()
             .baseUrl(baseUrl)
             .client(okHttpClient)

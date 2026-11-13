@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -224,7 +225,7 @@ fun StandardChatScreen(
                     .size(50.dp)
                     .clip(CircleShape)
                     .background(whatsappGreen)
-                    .clickable {
+                    .clickable(role = Role.Button) {
                         if (inputText.isNotBlank()) {
                             chatViewModel.sendTextMessage(inputText)
                             inputText = ""
