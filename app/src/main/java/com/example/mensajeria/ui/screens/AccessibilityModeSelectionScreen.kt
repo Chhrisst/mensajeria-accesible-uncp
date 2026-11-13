@@ -60,7 +60,7 @@ fun AccessibilityModeSelectionScreen(
     val context = LocalContext.current
     LaunchedEffect(Unit) {
         onSpeakAnnouncement(
-            "¿Cómo deseas usar la app? Pulsa el lado izquierdo para Modo Accesible si tienes discapacidad visual. Pulsa el lado derecho para Modo Estándar sin discapacidad."
+            "¿Cómo deseas usar la app? Pulsa el lado izquierdo de la pantalla para Modo Accesible con discapacidad visual. Pulsa el lado derecho de la pantalla para Modo Estándar sin discapacidad."
         )
     }
 
@@ -108,14 +108,17 @@ fun AccessibilityModeSelectionScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .exploreTarget(id = "mode_accessible", label = "Modo accesible")
+                        .exploreTarget(
+                            id = "mode_accessible",
+                            label = "Pulsa el lado izquierdo de la pantalla para Modo Accesible"
+                        )
                         .clickable {
                             playAccessibleClickFeedback(context)
                             onSelectMode(true)
                         }
                         .semantics {
                             this.role = Role.Button
-                            this.contentDescription = "Lado izquierdo: Modo Accesible. Diseñado para personas con discapacidad visual. Activa narrador de voz, dictado y navegación por lados."
+                            this.contentDescription = "Pulsa el lado izquierdo de la pantalla para Modo Accesible. Diseñado para personas con discapacidad visual."
                         },
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(containerColor = DarkCardBackground),
@@ -208,14 +211,17 @@ fun AccessibilityModeSelectionScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .exploreTarget(id = "mode_standard", label = "Modo estándar")
+                        .exploreTarget(
+                            id = "mode_standard",
+                            label = "Pulsa el lado derecho de la pantalla para Modo Estándar"
+                        )
                         .clickable {
                             playAccessibleClickFeedback(context)
                             onSelectMode(false)
                         }
                         .semantics {
                             this.role = Role.Button
-                            this.contentDescription = "Lado derecho: Modo Estándar. Para personas sin discapacidad visual. Interfaz convencional con teclado en pantalla."
+                            this.contentDescription = "Pulsa el lado derecho de la pantalla para Modo Estándar. Para personas sin discapacidad visual."
                         },
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF141A1F)),
