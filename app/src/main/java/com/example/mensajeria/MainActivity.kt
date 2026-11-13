@@ -187,6 +187,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (::chatViewModel.isInitialized && chatViewModel.uiState.value.isInCall) {
+            chatViewModel.endVoiceCall()
+        }
         voiceAssistantManager.destroy()
     }
 }
@@ -207,6 +210,12 @@ fun MensajeriaApp(
 
     val authState by authViewModel.uiState.collectAsState()
     val chatUiState by chatViewModel.uiState.collectAsState()
+
+    // Si hay una llamada activa (o sonando) y se pulsa el botón Atrás del sistema, colgar de inmediato
+    BackHandler(enabled = chatUiState.isInCall) {
+        chatViewModel.endVoiceCall()
+    }
+
     val savedSessionUser = authState.authenticatedUser ?: authViewModel.authRepository.currentUser.collectAsState().value
 
     var isDisabilityMode by remember {

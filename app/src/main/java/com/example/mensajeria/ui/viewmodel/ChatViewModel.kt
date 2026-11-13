@@ -12,7 +12,10 @@ import com.example.mensajeria.data.model.Contact
 import com.example.mensajeria.data.model.Message
 import com.example.mensajeria.data.model.VoiceState
 import com.example.mensajeria.data.repository.ChatRepository
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import com.example.mensajeria.domain.service.CallSignalParser
 import com.example.mensajeria.domain.service.CallSignalType
 import com.example.mensajeria.domain.service.DecryptedCallStreamItem
@@ -57,13 +60,17 @@ class ChatViewModel(
     var isDisabilityMode: Boolean = true
     var currentUserId: String = ""
     var currentUserName: String = "Usuario"
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var pollingJob: Job? = null
     private var messagesJob: Job? = null
     private var refineJob: Job? = null
     private var recordingTimerJob: Job? = null
     private var callTimerJob: Job? = null
+    private var callHeartbeatJob: Job? = null
+    private var callWatchdogJob: Job? = null
     private var incomingCallPollingJob: Job? = null
     private var activeCallFallbackPollingJob: Job? = null
+    @Volatile private var lastPeerActivityTimeMs: Long = 0L
 
     @Volatile private var isOutgoingCaller: Boolean = false
     private val processedCallStreamIds = Collections.synchronizedSet(mutableSetOf<String>())
@@ -73,6 +80,7 @@ class ChatViewModel(
         const val TAG = "ChatViewModel"
         const val AI_TIMEOUT_MS = 12_000L
         const val CALL_RING_TIMEOUT_MS = 35_000L
+        const val CALL_DISCONNECT_TIMEOUT_MS = 5_500L
     }
 
     val ttsService = TextToSpeechService(context) {
@@ -90,12 +98,14 @@ class ChatViewModel(
 
             override fun onRemoteRinging(callId: String, fromUserId: String) {
                 if (_uiState.value.isInCall && _uiState.value.activeCallId == callId && !_uiState.value.isIncomingCall) {
+                    lastPeerActivityTimeMs = System.currentTimeMillis()
                     _uiState.update { it.copy(callStatusText = "Timbrando...") }
                 }
             }
 
             override fun onRemoteAccepted(callId: String, fromUserId: String) {
                 if (_uiState.value.isInCall && _uiState.value.activeCallId == callId && !_uiState.value.isIncomingCall && _uiState.value.callStatusText != "En llamada") {
+                    lastPeerActivityTimeMs = System.currentTimeMillis()
                     enterActiveConnectedCall()
                 }
             }
@@ -110,7 +120,26 @@ class ChatViewModel(
 
             override fun onRemoteAudioChunk(callId: String, fromUserId: String, audioBase64: String) {
                 if (_uiState.value.isInCall && _uiState.value.activeCallId == callId && !_uiState.value.isIncomingCall) {
+                    lastPeerActivityTimeMs = System.currentTimeMillis()
                     voiceCallService.playRemotePcmBase64(audioBase64)
+                }
+            }
+
+            override fun onRemoteHeartbeat(callId: String, fromUserId: String) {
+                if (_uiState.value.isInCall && _uiState.value.activeCallId == callId) {
+                    lastPeerActivityTimeMs = System.currentTimeMillis()
+                }
+            }
+
+            override fun onPeerOffline(callId: String, targetId: String) {
+                val state = _uiState.value
+                val partnerId = state.callPartner?.id ?: state.contact.id
+                if (state.isInCall && (targetId.isBlank() || targetId == partnerId)) {
+                    handleRemoteCallTerminated(
+                        callId = state.activeCallId,
+                        isRejected = false,
+                        customSpeech = "Llamada finalizada. El contacto se ha desconectado."
+                    )
                 }
             }
         }
@@ -607,6 +636,12 @@ class ChatViewModel(
         val partnerId = state.callPartner?.id ?: state.contact.id
         if (activeCallId.isBlank() || (partnerId.isNotBlank() && partnerId != contactId)) return
 
+        // Actualizar actividad si llega cualquier señal remota de este contacto
+        val incomingSignals = items.filter { !it.isFromMe && (it.senderId == partnerId || it.senderId == contactId) }
+        if (incomingSignals.isNotEmpty()) {
+            lastPeerActivityTimeMs = System.currentTimeMillis()
+        }
+
         if (CallSignalParser.isCallRejected(items, activeCallId)) {
             handleRemoteCallTerminated(activeCallId, isRejected = true)
             return
@@ -672,7 +707,8 @@ class ChatViewModel(
                     timestampMs = System.currentTimeMillis()
                 )
             )
-            viewModelScope.launch {
+            val scope = if (type == CallSignalType.END || type == CallSignalType.REJECT) appScope else viewModelScope
+            scope.launch {
                 repository.sendMessageRemote(
                     userId = currentUserId,
                     contactId = targetId,
@@ -834,6 +870,8 @@ class ChatViewModel(
         val callId = state.activeCallId
 
         callTimerJob?.cancel()
+        callHeartbeatJob?.cancel()
+        callWatchdogJob?.cancel()
         activeCallFallbackPollingJob?.cancel()
         voiceCallService.stopAudioStreaming()
         soundService.playButtonClickSound()
@@ -866,7 +904,10 @@ class ChatViewModel(
         val partner = state.callPartner ?: state.contact
         val callId = state.activeCallId
 
+        lastPeerActivityTimeMs = System.currentTimeMillis()
         callTimerJob?.cancel()
+        callHeartbeatJob?.cancel()
+        callWatchdogJob?.cancel()
         activeCallFallbackPollingJob?.cancel()
         soundService.playSuccessSound()
 
@@ -908,6 +949,57 @@ class ChatViewModel(
             }
         }
 
+        callHeartbeatJob = viewModelScope.launch {
+            while (_uiState.value.isInCall &&
+                !_uiState.value.isIncomingCall &&
+                _uiState.value.activeCallId == callId
+            ) {
+                delay(1500L)
+                if (!_uiState.value.isInCall || _uiState.value.activeCallId != callId) break
+                sendCallSignal(
+                    type = CallSignalType.PRESENCE,
+                    callId = callId,
+                    targetId = partner.id,
+                    alsoSendHttpFallback = !voiceCallService.isWebSocketConnected()
+                )
+            }
+        }
+
+        callWatchdogJob = viewModelScope.launch {
+            while (_uiState.value.isInCall &&
+                !_uiState.value.isIncomingCall &&
+                _uiState.value.activeCallId == callId
+            ) {
+                delay(1000L)
+                if (!_uiState.value.isInCall || _uiState.value.activeCallId != callId) break
+
+                // 1. Pérdida de red local en este dispositivo
+                if (!voiceCallService.isNetworkConnected()) {
+                    Log.w(TAG, "Llamada $callId: Sin conexión a internet local.")
+                    handleRemoteCallTerminated(
+                        callId = callId,
+                        isRejected = false,
+                        customSpeech = "Llamada finalizada por pérdida de conexión a internet."
+                    )
+                    break
+                }
+
+                // 2. Pérdida de actividad del contacto remoto (app cerrada o caída)
+                if (_uiState.value.callStatusText == "En llamada") {
+                    val elapsed = System.currentTimeMillis() - lastPeerActivityTimeMs
+                    if (elapsed > CALL_DISCONNECT_TIMEOUT_MS) {
+                        Log.w(TAG, "Llamada $callId: Contacto ${partner.name} sin respuesta por ${elapsed}ms. Cortando llamada.")
+                        handleRemoteCallTerminated(
+                            callId = callId,
+                            isRejected = false,
+                            customSpeech = "Llamada finalizada por desconexión de ${partner.name}."
+                        )
+                        break
+                    }
+                }
+            }
+        }
+
         activeCallFallbackPollingJob = viewModelScope.launch {
             while (_uiState.value.isInCall &&
                 !_uiState.value.isIncomingCall &&
@@ -922,7 +1014,11 @@ class ChatViewModel(
         }
     }
 
-    private fun handleRemoteCallTerminated(callId: String, isRejected: Boolean) {
+    private fun handleRemoteCallTerminated(
+        callId: String,
+        isRejected: Boolean,
+        customSpeech: String? = null
+    ) {
         val state = _uiState.value
         if (!state.isInCall || state.activeCallId != callId) return
 
@@ -932,6 +1028,8 @@ class ChatViewModel(
         isOutgoingCaller = false
 
         callTimerJob?.cancel()
+        callHeartbeatJob?.cancel()
+        callWatchdogJob?.cancel()
         activeCallFallbackPollingJob?.cancel()
         voiceCallService.stopAudioStreaming()
         soundService.playButtonClickSound()
@@ -953,14 +1051,14 @@ class ChatViewModel(
             if (partner.id == _uiState.value.contact.id) {
                 sendAndAnnounce(text = summary, successSpeech = "Llamada finalizada.", alwaysSpeak = false)
             } else {
-                viewModelScope.launch {
+                appScope.launch {
                     repository.sendMessageRemote(currentUserId, partner.id, summary)
                 }
             }
         }
 
         if (isDisabilityMode) {
-            val msg = if (isRejected) "Llamada rechazada por ${partner.name}." else "Llamada finalizada."
+            val msg = customSpeech ?: if (isRejected) "Llamada rechazada por ${partner.name}." else "Llamada finalizada."
             ttsService.speak(msg)
         }
     }
@@ -998,6 +1096,8 @@ class ChatViewModel(
         isOutgoingCaller = false
 
         callTimerJob?.cancel()
+        callHeartbeatJob?.cancel()
+        callWatchdogJob?.cancel()
         activeCallFallbackPollingJob?.cancel()
         voiceCallService.stopAudioStreaming()
         soundService.playButtonClickSound()
@@ -1036,7 +1136,7 @@ class ChatViewModel(
                     alwaysSpeak = false
                 )
             } else {
-                viewModelScope.launch {
+                appScope.launch {
                     repository.sendMessageRemote(currentUserId, partner.id, summary)
                 }
             }
@@ -1189,14 +1289,20 @@ class ChatViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        if (_uiState.value.isInCall) {
+            endVoiceCall()
+        }
         stopPolling()
         recordingTimerJob?.cancel()
         callTimerJob?.cancel()
+        callHeartbeatJob?.cancel()
+        callWatchdogJob?.cancel()
         incomingCallPollingJob?.cancel()
         activeCallFallbackPollingJob?.cancel()
         voiceCallService.release()
         audioService.release()
         speechService.destroy()
         ttsService.shutdown()
+        appScope.cancel()
     }
 }

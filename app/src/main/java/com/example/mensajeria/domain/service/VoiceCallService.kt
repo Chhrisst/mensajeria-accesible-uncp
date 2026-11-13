@@ -2,6 +2,8 @@ package com.example.mensajeria.domain.service
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
@@ -198,6 +200,8 @@ interface VoiceCallListener {
     fun onRemoteRejected(callId: String, fromUserId: String)
     fun onRemoteEnded(callId: String, fromUserId: String)
     fun onRemoteAudioChunk(callId: String, fromUserId: String, audioBase64: String)
+    fun onRemoteHeartbeat(callId: String, fromUserId: String) {}
+    fun onPeerOffline(callId: String, targetId: String) {}
 }
 
 /**
@@ -249,6 +253,13 @@ class VoiceCallService(private val context: Context) {
     private val playbackQueue = LinkedBlockingQueue<ByteArray>(24)
 
     fun isWebSocketConnected(): Boolean = wsConnected
+
+    fun isNetworkConnected(): Boolean {
+        val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        val net = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(net) ?: return false
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
 
     fun connectWebSocket(userId: String) {
         val cleanId = userId.trim()
@@ -353,6 +364,11 @@ class VoiceCallService(private val context: Context) {
                     "CALL_REJECT" -> cb.onRemoteRejected(callId, fromId)
                     "CALL_END" -> cb.onRemoteEnded(callId, fromId)
                     "CALL_AUDIO" -> if (audioB64.isNotBlank()) cb.onRemoteAudioChunk(callId, fromId, audioB64)
+                    "CALL_PRESENCE", "CALL_HEARTBEAT" -> cb.onRemoteHeartbeat(callId, fromId)
+                    "WS_TARGET_OFFLINE" -> {
+                        val targetId = obj.get("target_id")?.asString ?: fromId
+                        cb.onPeerOffline(callId, targetId)
+                    }
                 }
             }
         } catch (e: Exception) {
