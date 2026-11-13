@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.example.mensajeria.domain.service.TextToSpeechService
 import com.example.mensajeria.data.model.Contact
 import com.example.mensajeria.data.model.UserProfile
 import com.example.mensajeria.data.repository.AuthRepository
@@ -147,6 +148,41 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // El usuario está dentro de la app: habilitar locución
+        TextToSpeechService.isAppInForeground = true
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // La app pasó a segundo plano: silenciar y pausar el asistente de inmediato
+        TextToSpeechService.isAppInForeground = false
+        pauseAssistantAndVoice()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        TextToSpeechService.isAppInForeground = false
+        pauseAssistantAndVoice()
+    }
+
+    private fun pauseAssistantAndVoice() {
+        try {
+            if (::authViewModel.isInitialized) {
+                authViewModel.ttsService.stop()
+                authViewModel.speechService.stopListening()
+            }
+            if (::chatViewModel.isInitialized) {
+                chatViewModel.ttsService.stop()
+                chatViewModel.speechService.stopListening()
+            }
+            if (::voiceAssistantManager.isInitialized) {
+                voiceAssistantManager.stopAssistant()
+            }
+        } catch (_: Exception) {}
     }
 
     override fun onDestroy() {

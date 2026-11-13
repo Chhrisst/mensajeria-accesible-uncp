@@ -7,7 +7,9 @@ import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import java.util.Collections
 import java.util.Locale
+import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -70,6 +72,9 @@ class TextToSpeechService(
     private var tts: TextToSpeech? = null
 
     init {
+        synchronized(activeInstances) {
+            activeInstances.add(this)
+        }
         tts = try {
             TextToSpeech(context, this, "com.google.android.tts")
         } catch (_: Exception) {
@@ -147,13 +152,17 @@ class TextToSpeechService(
         mainHandler.post {
             onInitSuccess()
 
-            // Reproducir cualquier anuncio pendiente que se haya solicitado mientras cargaba el motor
+            // Reproducir anuncio pendiente únicamente si la app sigue en primer plano
             val textToPlay = pendingText
             val cbToRun = pendingCallbacks
             pendingText = null
             pendingCallbacks = null
             if (!textToPlay.isNullOrBlank() && cbToRun != null) {
-                speakInternal(textToPlay, TextToSpeech.QUEUE_FLUSH, cbToRun)
+                if (isAppInForeground) {
+                    speakInternal(textToPlay, TextToSpeech.QUEUE_FLUSH, cbToRun)
+                } else {
+                    mainHandler.post { cbToRun.onInterrupted() }
+                }
             }
         }
     }
@@ -221,6 +230,12 @@ class TextToSpeechService(
         onInterrupted: () -> Unit = {}
     ) {
         val cb = UtteranceCallbacks(onDone, onInterrupted)
+        // El asistente solo debe hablar cuando el usuario está dentro de la app (primer plano)
+        if (!isAppInForeground) {
+            Log.d(TAG, "App en segundo plano: descartando locución '$text'")
+            mainHandler.post { cb.onInterrupted() }
+            return
+        }
         if (text.isBlank()) {
             mainHandler.post { cb.onDone() }
             return
@@ -246,6 +261,10 @@ class TextToSpeechService(
     }
 
     private fun speakInternal(formattedText: String, queueMode: Int, cb: UtteranceCallbacks) {
+        if (!isAppInForeground) {
+            mainHandler.post { cb.onInterrupted() }
+            return
+        }
         val engine = tts
         if (engine == null) {
             mainHandler.post { cb.onDone() }
@@ -276,6 +295,9 @@ class TextToSpeechService(
     }
 
     fun shutdown() {
+        synchronized(activeInstances) {
+            activeInstances.remove(this)
+        }
         pendingText = null
         pendingCallbacks = null
         callbacks.clear()
@@ -334,7 +356,25 @@ class TextToSpeechService(
         return score
     }
 
-    private companion object {
+    companion object {
         const val TAG = "TextToSpeechService"
+
+        private val activeInstances = Collections.newSetFromMap(WeakHashMap<TextToSpeechService, Boolean>())
+
+        @Volatile
+        var isAppInForeground: Boolean = true
+            set(value) {
+                field = value
+                if (!value) {
+                    // Si pasa a segundo plano, detener y pausar de inmediato cualquier locución activa
+                    synchronized(activeInstances) {
+                        activeInstances.forEach {
+                            try {
+                                it.stop()
+                            } catch (_: Exception) {}
+                        }
+                    }
+                }
+            }
     }
 }
