@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -97,7 +98,12 @@ fun AccessibleContactListScreen(
             if (wasDifferent) {
                 val contact = contacts[clamped]
                 val handlePart = if (contact.username.isNotBlank()) ", usuario arroba ${contact.username}" else ""
-                authViewModel.ttsService.speak("${contact.name}$handlePart, ${contact.getConnectionStatusText()}")
+                val unreadPart = when {
+                    contact.unreadCount == 1 -> ", te envió 1 mensaje nuevo"
+                    contact.unreadCount > 1 -> ", te envió ${contact.unreadCount} mensajes nuevos"
+                    else -> ""
+                }
+                authViewModel.ttsService.speak("${contact.name}$handlePart$unreadPart, ${contact.getConnectionStatusText()}")
             }
         }
     }
@@ -226,8 +232,13 @@ fun AccessibleContactListScreen(
                     itemsIndexed(contacts) { index, contact ->
                         val isFocused = index == focusedIndex
                         val handleSpeech = if (contact.username.isNotBlank()) ", usuario arroba ${contact.username}" else ""
+                        val unreadSpeech = when {
+                            contact.unreadCount == 1 -> ", te envió 1 mensaje nuevo"
+                            contact.unreadCount > 1 -> ", te envió ${contact.unreadCount} mensajes nuevos"
+                            else -> ""
+                        }
                         val statusText = contact.getConnectionStatusText()
-                        val fullExploreLabel = "${contact.name}$handleSpeech, $statusText"
+                        val fullExploreLabel = "${contact.name}$handleSpeech$unreadSpeech, $statusText"
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -316,7 +327,27 @@ fun AccessibleContactListScreen(
                                     )
                                 }
 
+                                if (contact.unreadCount > 0) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .defaultMinSize(minWidth = 28.dp, minHeight = 28.dp)
+                                            .clip(CircleShape)
+                                            .background(if (isFocused) PureBlack else AccessibleYellow)
+                                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "${contact.unreadCount}",
+                                            color = if (isFocused) AccessibleYellow else PureBlack,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.ExtraBold
+                                        )
+                                    }
+                                }
+
                                 if (isFocused) {
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.Chat,
                                         contentDescription = null,

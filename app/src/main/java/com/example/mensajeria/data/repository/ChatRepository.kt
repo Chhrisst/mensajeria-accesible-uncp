@@ -76,13 +76,30 @@ class ChatRepository(private val context: Context? = null) {
         currentActiveUserId = userId
         knownMessageIds.clear()
         initialSyncedContacts.clear()
+        currentConversationKey = ""
         loadPersistedContacts(userId)
         for (c in _contacts.value) {
-            val local = loadPersistedMessages(userId, c.id)
+            val local = readPersistedMessagesOnly(userId, c.id)
             for (m in local) {
                 if (m.id.isNotBlank()) knownMessageIds.add(m.id)
             }
         }
+        currentConversationKey = ""
+    }
+
+    fun readPersistedMessagesOnly(userId: String, contactId: String): List<Message> {
+        val conversationKey = getMessagesPrefKey(userId, contactId)
+        val ctx = getEffectiveContext() ?: return emptyList()
+        try {
+            val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val json = prefs.getString(conversationKey, null)
+            if (!json.isNullOrBlank()) {
+                val type = object : TypeToken<List<Message>>() {}.type
+                val savedList: List<Message?> = gson.fromJson(json, type) ?: emptyList()
+                return savedList.mapNotNull { sanitizeMessage(it) }
+            }
+        } catch (_: Exception) {}
+        return emptyList()
     }
 
     private fun getContactsPrefKey(userId: String): String {
@@ -127,13 +144,15 @@ class ChatRepository(private val context: Context? = null) {
         val username = (raw.username as String?) ?: ""
         val name = (raw.name as String?)?.takeIf { it.isNotBlank() } ?: username.ifBlank { return null }
         val rawTime = (raw.lastSeenTime as String?) ?: ""
+        val unread = try { (raw.unreadCount as Number?)?.toInt()?.coerceAtLeast(0) ?: 0 } catch (_: Exception) { 0 }
         return Contact(
             id = id,
             name = name,
             username = username,
             description = (raw.description as String?) ?: "",
             isOnline = raw.isOnline,
-            lastSeenTime = rawTime
+            lastSeenTime = rawTime,
+            unreadCount = unread
         )
     }
 
@@ -186,13 +205,15 @@ class ChatRepository(private val context: Context? = null) {
         val knownPresence = contactIncomingPresence[id]
         val isOnlineNow = (c.isOnline == true) || (knownPresence?.first == true)
         val resolvedLastSeen = knownPresence?.second ?: ""
+        val existingUnread = _contacts.value.firstOrNull { it.id == id }?.unreadCount ?: (c.unreadCount ?: 0)
         val contactObj = Contact(
             id = id,
             name = name,
             username = username,
             description = displayDesc,
             isOnline = isOnlineNow,
-            lastSeenTime = resolvedLastSeen
+            lastSeenTime = resolvedLastSeen,
+            unreadCount = existingUnread
         )
         if (isCallSignal && parsedSignal?.type == CallSignalType.INVITE) {
             onCallSignalDetectedFromContact?.invoke(contactObj, rawDecrypted)
@@ -413,10 +434,27 @@ class ChatRepository(private val context: Context? = null) {
     // GESTIÓN DE MENSAJES END-TO-END Y BASE DE DATOS
     // ==========================================
 
+    fun clearUnreadCount(contactId: String) {
+        if (contactId.isBlank()) return
+        _contacts.update { list ->
+            list.map { c ->
+                if (c.id == contactId && c.unreadCount > 0) c.copy(unreadCount = 0) else c
+            }
+        }
+        if (currentActiveUserId.isNotBlank()) {
+            persistContacts(currentActiveUserId)
+        }
+    }
+
+    fun clearActiveConversation() {
+        currentConversationKey = ""
+    }
+
     fun loadPersistedMessages(userId: String, contactId: String): List<Message> {
         val conversationKey = getMessagesPrefKey(userId, contactId)
         val isNewConversation = conversationKey != currentConversationKey
         currentConversationKey = conversationKey
+        clearUnreadCount(contactId)
         // Al cambiar de conversación se limpia la lista: antes, si el nuevo contacto no tenía caché,
         // se seguían mostrando (y leyendo en voz alta) los mensajes del contacto anterior.
         if (isNewConversation) {
@@ -649,12 +687,22 @@ class ChatRepository(private val context: Context? = null) {
         val newIncoming = remoteMessages.filter { !it.isOutgoing && it.id.isNotBlank() && knownMessageIds.add(it.id) }
         if (newIncoming.isNotEmpty()) {
             val conversationKey = getMessagesPrefKey(userId, contactId)
-            if (conversationKey == currentConversationKey) {
+            val isCurrentConversation = (conversationKey == currentConversationKey && currentConversationKey.isNotBlank())
+            if (isCurrentConversation) {
                 val currentIds = _messages.value.mapTo(HashSet()) { it.id }
                 val toAdd = newIncoming.filter { it.id !in currentIds }
                 if (toAdd.isNotEmpty()) {
                     _messages.update { it + toAdd }
                 }
+            } else {
+                _contacts.update { list ->
+                    list.map { c ->
+                        if (c.id == contactId) {
+                            c.copy(unreadCount = c.unreadCount + newIncoming.size)
+                        } else c
+                    }
+                }
+                persistContacts(userId)
             }
             persistMessages(userId, contactId)
 

@@ -495,19 +495,10 @@ class ChatViewModel(
             vibrationService.vibrateMessageReceived()
 
             // 3. Anuncio por voz del Asistente
-            val isCurrentChatOpen = (_uiState.value.contact.id == senderContact.id)
             val announcement = if (message.isVoiceNote) {
-                if (isCurrentChatOpen) {
-                    "${senderContact.name} te envió una nota de voz."
-                } else {
-                    "Nuevo mensaje de voz de ${senderContact.name}."
-                }
+                "Nuevo mensaje de voz de ${senderContact.name}."
             } else {
-                if (isCurrentChatOpen) {
-                    "${senderContact.name}: ${message.text}"
-                } else {
-                    "Mensaje de ${senderContact.name}: ${message.text}"
-                }
+                "Nuevo mensaje de ${senderContact.name}: ${message.text}"
             }
             ttsService.speak(announcement)
         }
@@ -1108,6 +1099,7 @@ class ChatViewModel(
 
         refineJob?.cancel()
         val resolvedContact = repository.contacts.value.find { it.id == contact.id } ?: contact
+        repository.clearUnreadCount(contact.id)
         _uiState.update {
             it.copy(
                 contact = resolvedContact,
@@ -1159,6 +1151,12 @@ class ChatViewModel(
         pollingJob = null
         messagesJob?.cancel()
         messagesJob = null
+        repository.clearActiveConversation()
+    }
+
+    fun clearActiveConversation() {
+        stopPolling()
+        _uiState.update { it.copy(contact = Contact()) }
     }
 
     /**

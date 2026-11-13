@@ -26,7 +26,8 @@ data class Contact(
     val username: String = "",
     val description: String = "",
     val isOnline: Boolean = false,
-    val lastSeenTime: String? = ""
+    val lastSeenTime: String? = "",
+    val unreadCount: Int = 0
 ) {
     fun getLastSeenDisplay(): String {
         val raw = try {

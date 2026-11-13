@@ -282,7 +282,7 @@ fun MensajeriaApp(
             currentScreen = AppFlowScreen.ACCESSIBLE_CHAT
         }
         voiceAssistantManager.onBackToContacts = {
-            chatViewModel.stopPolling()
+            chatViewModel.clearActiveConversation()
             currentScreen = AppFlowScreen.ACCESSIBLE_CONTACTS
         }
         voiceAssistantManager.onLogout = {
@@ -443,6 +443,7 @@ fun MensajeriaApp(
                 onMinimizeApp()
             }
             androidx.compose.runtime.LaunchedEffect(currentUser.id) {
+                chatViewModel.clearActiveConversation()
                 chatRepository.setSessionUser(currentUser.id)
                 chatRepository.syncContactsFromRemote(currentUser.id)
             }
@@ -467,7 +468,7 @@ fun MensajeriaApp(
         // 2.5 CHAT ACCESIBLE CON VOZ A TEXTO, NOTA DE VOZ, SALIR EN ESQUINA SUPERIOR IZQUIERDA
         AppFlowScreen.ACCESSIBLE_CHAT -> {
             BackHandler {
-                chatViewModel.stopPolling()
+                chatViewModel.clearActiveConversation()
                 currentScreen = AppFlowScreen.ACCESSIBLE_CONTACTS
             }
             AccessibleChatScreen(
@@ -475,7 +476,7 @@ fun MensajeriaApp(
                 chatViewModel = chatViewModel,
                 voiceAssistantManager = voiceAssistantManager,
                 onBackToContacts = {
-                    chatViewModel.stopPolling()
+                    chatViewModel.clearActiveConversation()
                     currentScreen = AppFlowScreen.ACCESSIBLE_CONTACTS
                 }
             )
@@ -522,6 +523,7 @@ fun MensajeriaApp(
                 onMinimizeApp()
             }
             androidx.compose.runtime.LaunchedEffect(currentUser.id) {
+                chatViewModel.clearActiveConversation()
                 chatRepository.setSessionUser(currentUser.id)
                 chatRepository.syncContactsFromRemote(currentUser.id)
             }
@@ -545,14 +547,14 @@ fun MensajeriaApp(
         // 3.1 CHAT ESTÁNDAR (TIPO WHATSAPP)
         AppFlowScreen.STANDARD_CHAT -> {
             BackHandler {
-                chatViewModel.stopPolling()
+                chatViewModel.clearActiveConversation()
                 currentScreen = AppFlowScreen.STANDARD_CONTACTS
             }
             StandardChatScreen(
                 contact = selectedContact,
                 chatViewModel = chatViewModel,
                 onBackToContacts = {
-                    chatViewModel.stopPolling()
+                    chatViewModel.clearActiveConversation()
                     currentScreen = AppFlowScreen.STANDARD_CONTACTS
                 }
             )
