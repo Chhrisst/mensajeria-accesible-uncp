@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
@@ -30,6 +31,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +51,7 @@ import com.example.mensajeria.ui.theme.ErrorRed
 import com.example.mensajeria.ui.theme.PureBlack
 import com.example.mensajeria.ui.theme.TextSecondaryGray
 import com.example.mensajeria.ui.viewmodel.AuthViewModel
+import kotlinx.coroutines.delay
 
 /**
  * Pantalla de Registro Estándar (Modo Sin Discapacidad).
@@ -60,10 +63,14 @@ fun StandardRegisterScreen(
     onRegistrationSuccess: (UserProfile) -> Unit
 ) {
     var fullName by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var nameError by remember { mutableStateOf<String?>(null) }
+    var usernameError by remember { mutableStateOf<String?>(null) }
+    var isCheckingUsername by remember { mutableStateOf(false) }
+    var isUsernameAvailableState by remember { mutableStateOf<Boolean?>(null) }
     var emailError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
     var submitError by remember { mutableStateOf<String?>(null) }
@@ -71,6 +78,25 @@ fun StandardRegisterScreen(
 
     val whatsappGreen = Color(0xFF25D366)
     val cardDark = Color(0xFF1F2C34)
+
+    LaunchedEffect(username) {
+        val clean = username.trim().removePrefix("@").lowercase()
+        if (clean.length < 3) {
+            isUsernameAvailableState = null
+            usernameError = null
+            return@LaunchedEffect
+        }
+        delay(350)
+        isCheckingUsername = true
+        val available = authViewModel.checkUsernameAvailability(clean)
+        isCheckingUsername = false
+        isUsernameAvailableState = available
+        if (!available) {
+            usernameError = "El usuario @$clean ya está en uso. Elige otro."
+        } else {
+            usernameError = null
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -120,6 +146,44 @@ fun StandardRegisterScreen(
                 enabled = !isLoading,
                 label = { Text("Nombre completo") },
                 leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = whatsappGreen) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = cardDark,
+                    unfocusedContainerColor = cardDark,
+                    focusedBorderColor = whatsappGreen,
+                    unfocusedBorderColor = Color(0xFF2A3942),
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedLabelColor = whatsappGreen,
+                    unfocusedLabelColor = TextSecondaryGray
+                )
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = username,
+                onValueChange = { input ->
+                    username = input.filter { it.isLetterOrDigit() || it == '_' || it == '@' }
+                    usernameError = null
+                    submitError = null
+                },
+                isError = usernameError != null,
+                supportingText = {
+                    if (usernameError != null) {
+                        Text(usernameError!!, color = ErrorRed)
+                    } else if (isCheckingUsername) {
+                        Text("Verificando disponibilidad...", color = TextSecondaryGray)
+                    } else if (isUsernameAvailableState == true) {
+                        Text("✓ @${username.trim().removePrefix("@")} está disponible", color = Color(0xFF25D366))
+                    } else {
+                        Text("Identificador único para que otros te encuentren (ej: @carlos20)", color = TextSecondaryGray)
+                    }
+                },
+                enabled = !isLoading,
+                label = { Text("Nombre de usuario (@usuario)") },
+                leadingIcon = { Icon(Icons.Default.AlternateEmail, contentDescription = null, tint = whatsappGreen) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -209,13 +273,17 @@ fun StandardRegisterScreen(
 
             Button(
                 onClick = {
+                    val cleanUsername = username.trim().removePrefix("@").lowercase()
                     nameError = if (fullName.isBlank()) "Ingresa tu nombre completo." else null
+                    usernameError = AuthViewModel.validateUsername(username)
+                        ?: if (isUsernameAvailableState == false) "El usuario @$cleanUsername ya existe. Elige otro." else null
                     emailError = AuthViewModel.validateEmail(email)
                     passwordError = AuthViewModel.validatePassword(password)
-                    if (nameError != null || emailError != null || passwordError != null) return@Button
+                    if (nameError != null || usernameError != null || emailError != null || passwordError != null) return@Button
                     authViewModel.registerManual(
                         RegistrationForm(
                             fullName = fullName.trim(),
+                            username = cleanUsername,
                             email = email.trim(),
                             phone = phone.trim(),
                             pin = password,

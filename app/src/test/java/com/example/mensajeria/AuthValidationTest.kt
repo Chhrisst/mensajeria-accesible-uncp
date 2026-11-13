@@ -29,4 +29,15 @@ class AuthValidationTest {
         assertNotNull(AuthViewModel.validateUserOrEmail("ana@"))
         assertNotNull(AuthViewModel.validateUserOrEmail("   "))
     }
+
+    @Test
+    fun usernameValidation() {
+        assertNull(AuthViewModel.validateUsername("carlos20"))
+        assertNull(AuthViewModel.validateUsername("@maria_lopez"))
+        assertNull(AuthViewModel.validateUsername("ana_123"))
+        assertNotNull(AuthViewModel.validateUsername(""))
+        assertNotNull(AuthViewModel.validateUsername("ab")) // menor a 3 caracteres
+        assertNotNull(AuthViewModel.validateUsername("user name")) // espacios no permitidos
+        assertNotNull(AuthViewModel.validateUsername("carlos!@#")) // caracteres especiales no permitidos
+    }
 }

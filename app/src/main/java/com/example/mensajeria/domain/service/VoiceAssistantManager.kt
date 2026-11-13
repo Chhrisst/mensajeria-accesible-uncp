@@ -363,14 +363,11 @@ class VoiceAssistantManager(
                                     ttsService.speak("Contacto $displayName agregado exitosamente a tu lista.")
                                 },
                                 onFailure = { error ->
-                                    // Si no está registrado en el backend o falló la red, guardarlo como contacto local en la agenda
-                                    val local = chatRepository.addContact(clean)
-                                    ttsService.speak("Contacto ${local.name} guardado en tu lista de contactos.")
+                                    ttsService.speak("No encontré a ningún usuario registrado con el nombre o usuario $clean. Pídele su nombre de usuario de Messenger para agregarlo.")
                                 }
                             )
                         } else {
-                            val local = chatRepository.addContact(clean)
-                            ttsService.speak("Contacto ${local.name} guardado en tu lista de contactos.")
+                            ttsService.speak("No se pudo agregar el contacto porque no hay una sesión activa.")
                         }
                     }
                 } else {

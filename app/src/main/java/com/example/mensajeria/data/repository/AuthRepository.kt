@@ -197,9 +197,14 @@ class AuthRepository(private val context: Context? = null) {
         val desc = if (form.hasDisability) "Con discapacidad" else "Sin discapacidad"
         val cleanBase = form.fullName.filter { it.isLetterOrDigit() }.lowercase().ifBlank { "usuario" }
         val generatedUsername = "${cleanBase}_${System.currentTimeMillis().toString().takeLast(4)}"
+        val chosenUsername = if (form.username.isNotBlank()) {
+            form.username.trim().removePrefix("@").lowercase()
+        } else {
+            generatedUsername
+        }
         val newUser = UserProfile(
             name = form.fullName.ifBlank { "Nuevo Socio" },
-            username = generatedUsername,
+            username = chosenUsername,
             email = form.email,
             phone = form.phone,
             dni = form.dni,
@@ -216,6 +221,28 @@ class AuthRepository(private val context: Context? = null) {
         persistUser(newUser)
         saveActiveSession(newUser)
         return newUser
+    }
+
+    suspend fun isUsernameAvailable(candidate: String): Boolean {
+        val clean = candidate.trim().removePrefix("@").lowercase()
+        if (clean.length < 3) return false
+        if (_users.any { it.username.trim().removePrefix("@").equals(clean, ignoreCase = true) }) {
+            return false
+        }
+        return try {
+            val response = com.example.mensajeria.data.api.RetrofitClient.api.getUsers()
+            if (response.isSuccessful && response.body() != null) {
+                val remoteUsers = response.body()!!
+                val exists = remoteUsers.any { u ->
+                    (u.username ?: "").trim().removePrefix("@").equals(clean, ignoreCase = true)
+                }
+                !exists
+            } else {
+                true
+            }
+        } catch (e: Exception) {
+            true
+        }
     }
 
     suspend fun loginRemote(query: String, passwordOrPin: String): Result<UserProfile> {
@@ -281,6 +308,7 @@ class AuthRepository(private val context: Context? = null) {
             val desc = if (form.hasDisability) "Con discapacidad" else "Sin discapacidad"
             val req = com.example.mensajeria.data.api.ApiRegisterRequest(
                 fullName = form.fullName,
+                username = form.username.trim().removePrefix("@").takeIf { it.isNotBlank() },
                 email = emailToSend,
                 phone = form.phone,
                 dni = form.dni,

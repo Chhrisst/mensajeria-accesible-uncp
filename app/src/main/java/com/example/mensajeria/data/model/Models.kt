@@ -96,6 +96,7 @@ enum class RegisterStep {
 data class RegistrationForm(
     val method: RegisterMethod = RegisterMethod.EMAIL,
     val fullName: String = "",
+    val username: String = "",
     val dni: String = "",
     val birthDate: String = "",
     val phone: String = "",

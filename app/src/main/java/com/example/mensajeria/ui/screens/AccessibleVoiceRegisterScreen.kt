@@ -74,6 +74,7 @@ fun AccessibleVoiceRegisterScreen(
     val coroutineScope = rememberCoroutineScope()
 
     var registeredName by remember { mutableStateOf("") }
+    var registeredUsername by remember { mutableStateOf("") }
     var sidePatternEntered by remember { mutableStateOf("") }
     var feedbackText by remember { mutableStateOf("Diga su nombre completo en voz alta...") }
     var isListening by remember { mutableStateOf(false) }
@@ -87,48 +88,74 @@ fun AccessibleVoiceRegisterScreen(
         )
     }
 
+    var startListeningAction: (() -> Unit)? = null
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         hasRecordPermission = isGranted
         if (isGranted) {
             authViewModel.soundService.playSuccessSound()
-            registeredName = ""
-            sidePatternEntered = ""
-            feedbackText = "Permiso concedido. Diga su nombre completo..."
-            isListening = true
-
-            authViewModel.ttsService.speak(
-                "Permiso concedido. Di tu nombre completo en voz alta.",
-                onDone = {
-                    coroutineScope.launch {
-                        delay(450)
-                        authViewModel.startRegistrationVoiceInput(
-                            onResult = { recognizedName ->
-                                isListening = false
-                                registeredName = recognizedName
-                                feedbackText = "Nombre recibido: $recognizedName"
-                                authViewModel.ttsService.speak(
-                                    "Nombre recibido: $recognizedName. Pulsa de izquierda a derecha cuatro veces para crear una combinación única."
-                                )
-                            },
-                            onError = { error ->
-                                isListening = false
-                                feedbackText = "No se escuchó claramente. Presiona Reintentar Dictado."
-                                authViewModel.ttsService.speak(
-                                    "No se escuchó claramente. Toca el botón Reintentar Dictado para intentarlo de nuevo."
-                                )
-                            }
-                        )
-                    }
-                }
-            )
+            startListeningAction?.invoke()
         } else {
             feedbackText = "Permiso de micrófono no concedido. Pulse Conceder Permiso para habilitarlo."
             authViewModel.ttsService.speak(
                 "El permiso de micrófono no fue concedido. Para registrarte por voz, debes permitir el acceso al micrófono."
             )
         }
+    }
+
+    fun startListeningForUsername() {
+        if (!hasRecordPermission) return
+
+        feedbackText = "Di tu nombre de usuario único en voz alta..."
+        isListening = true
+
+        authViewModel.ttsService.speak(
+            "Nombre recibido: $registeredName. Ahora, di tu nombre de usuario único, por ejemplo carlos20 o charly.",
+            onDone = {
+                coroutineScope.launch {
+                    delay(450)
+                    authViewModel.startRegistrationVoiceInput(
+                        onResult = { rawUsername ->
+                            isListening = false
+                            val cleanUser = rawUsername.trim().lowercase().replace(" ", "_")
+                                .filter { it.isLetterOrDigit() || it == '_' }
+                            if (cleanUser.length < 3) {
+                                feedbackText = "El nombre de usuario debe tener al menos 3 letras. Intenta de nuevo."
+                                authViewModel.ttsService.speak(
+                                    "El nombre de usuario debe tener al menos tres letras. Di otro nombre de usuario."
+                                )
+                                return@startRegistrationVoiceInput
+                            }
+                            feedbackText = "Comprobando disponibilidad de @$cleanUser..."
+                            coroutineScope.launch {
+                                val available = authViewModel.checkUsernameAvailability(cleanUser)
+                                if (!available) {
+                                    feedbackText = "El usuario @$cleanUser ya está registrado. Di otro diferente."
+                                    authViewModel.ttsService.speak(
+                                        "El nombre de usuario $cleanUser ya está registrado. Por favor, di otro nombre de usuario diferente."
+                                    )
+                                } else {
+                                    registeredUsername = cleanUser
+                                    feedbackText = "Usuario @$cleanUser disponible. Crea tu combinación de toques."
+                                    authViewModel.ttsService.speak(
+                                        "Nombre de usuario $cleanUser disponible. Pulsa de izquierda a derecha cuatro veces para crear una combinación única."
+                                    )
+                                }
+                            }
+                        },
+                        onError = { error ->
+                            isListening = false
+                            feedbackText = "No se escuchó claramente. Presiona Reintentar Dictado."
+                            authViewModel.ttsService.speak(
+                                "No se escuchó claramente el nombre de usuario. Toca el botón Reintentar Dictado para intentarlo de nuevo."
+                            )
+                        }
+                    )
+                }
+            }
+        )
     }
 
     fun startListeningForName() {
@@ -138,6 +165,7 @@ fun AccessibleVoiceRegisterScreen(
         }
 
         registeredName = ""
+        registeredUsername = ""
         sidePatternEntered = ""
         feedbackText = "Diga su nombre completo en voz alta..."
         isListening = true
@@ -152,10 +180,8 @@ fun AccessibleVoiceRegisterScreen(
                         onResult = { recognizedName ->
                             isListening = false
                             registeredName = recognizedName
-                            feedbackText = "Nombre recibido: $recognizedName"
-                            authViewModel.ttsService.speak(
-                                "Nombre recibido: $recognizedName. Pulsa de izquierda a derecha cuatro veces para crear una combinación única."
-                            )
+                            feedbackText = "Nombre recibido: $recognizedName. Di tu nombre de usuario único..."
+                            startListeningForUsername()
                         },
                         onError = { error ->
                             isListening = false
@@ -170,6 +196,8 @@ fun AccessibleVoiceRegisterScreen(
         )
     }
 
+    startListeningAction = { startListeningForName() }
+
     LaunchedEffect(Unit) {
         if (!hasRecordPermission) {
             authViewModel.ttsService.speak("Por favor, concede el permiso de micrófono en el mensaje de la pantalla.")
@@ -180,7 +208,7 @@ fun AccessibleVoiceRegisterScreen(
     }
 
     fun handleSideTap(side: Char) {
-        if (registeredName.isBlank()) return
+        if (registeredName.isBlank() || registeredUsername.isBlank()) return
 
         // Retroalimentación háptica exclusiva y diferenciada por lado:
         // Izquierda: 1 pulso (35ms)
@@ -203,6 +231,7 @@ fun AccessibleVoiceRegisterScreen(
             coroutineScope.launch {
                 val form = RegistrationForm(
                     fullName = registeredName.trim(),
+                    username = registeredUsername.trim(),
                     pin = newPattern,
                     hasDisability = true,
                     visualCondition = "Con discapacidad"
@@ -307,8 +336,61 @@ fun AccessibleVoiceRegisterScreen(
                         leadingIcon = Icons.Default.Mic
                     )
                 }
+            } else if (registeredUsername.isBlank()) {
+                // FASE 2: DICTADO DEL NOMBRE DE USUARIO ÚNICO
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    VoiceAssistantLogo(
+                        size = 180.dp,
+                        isPulsing = isListening,
+                        onClick = { startListeningForUsername() }
+                    )
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    Text(
+                        text = "Di tu nombre de usuario único",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AccessibleYellow,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "Ejemplo: carlos20 o charly",
+                        fontSize = 15.sp,
+                        color = TextSecondaryGray,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = feedbackText,
+                        fontSize = 16.sp,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 24.sp,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(28.dp))
+
+                    AccessibleOutlinedButton(
+                        text = if (isListening) "Escuchando tu usuario..." else "Reintentar Dictado de Usuario",
+                        onClick = { startListeningForUsername() },
+                        leadingIcon = Icons.Default.Mic
+                    )
+                }
             } else {
-                // FASE 2: CREACIÓN DE CLAVE POR TOQUES LATERALES (3 TOQUES)
+                // FASE 3: CREACIÓN DE CLAVE POR TOQUES LATERALES (4 TOQUES)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -316,7 +398,7 @@ fun AccessibleVoiceRegisterScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Hola, $registeredName",
+                        text = "Hola, $registeredName (@$registeredUsername)",
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
                         color = AccessibleYellow

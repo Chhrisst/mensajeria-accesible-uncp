@@ -89,6 +89,14 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
 
     return user_to_response(user)
 
+@router.get("/check-username/{username}")
+def check_username_availability(username: str, db: Session = Depends(get_db)):
+    clean = re.sub(r'[^a-zA-Z0-9_]', '', username.strip().lstrip('@')).lower()
+    if not clean or len(clean) < 3:
+        return {"available": False, "username": clean, "detail": "El nombre de usuario debe tener al menos 3 caracteres alfanuméricos."}
+    exists = db.query(User).filter(func.lower(User.username) == clean).first()
+    return {"available": exists is None, "username": clean}
+
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(request: RegisterRequest, db: Session = Depends(get_db)):
     clean_name = re.sub(r'[^a-zA-Z0-9]', '', request.full_name).lower() if request.full_name else "usuario"
@@ -100,15 +108,21 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
         chosen_username = re.sub(r'[^a-zA-Z0-9_]', '', request.username.strip().lstrip('@')).lower()
         if not chosen_username:
             chosen_username = f"{clean_name}_{str(uuid.uuid4())[:4]}"
+            candidate_username = chosen_username
+        else:
+            if db.query(User).filter(func.lower(User.username) == chosen_username).first():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"El nombre de usuario @{chosen_username} ya se encuentra registrado."
+                )
+            candidate_username = chosen_username
     else:
         chosen_username = f"{clean_name}_{str(uuid.uuid4())[:4]}"
-
-    # Asegurar unicidad de username
-    candidate_username = chosen_username
-    counter = 1
-    while db.query(User).filter(func.lower(User.username) == candidate_username).first():
-        candidate_username = f"{chosen_username}_{counter}"
-        counter += 1
+        candidate_username = chosen_username
+        counter = 1
+        while db.query(User).filter(func.lower(User.username) == candidate_username).first():
+            candidate_username = f"{chosen_username}_{counter}"
+            counter += 1
 
     # Si no tiene correo (registro por voz de persona con discapacidad visual), autogenerar uno
     if request.email and request.email.strip():

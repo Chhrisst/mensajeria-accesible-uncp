@@ -369,6 +369,17 @@ class AuthViewModel(
             else -> null
         }
 
+        /** Devuelve un mensaje de error en español, o null si el nombre de usuario es válido. */
+        fun validateUsername(username: String): String? {
+            val clean = username.trim().removePrefix("@").lowercase()
+            return when {
+                clean.isBlank() -> "Ingresa un nombre de usuario único."
+                clean.length < 3 -> "El nombre de usuario debe tener al menos 3 caracteres."
+                !clean.all { it.isLetterOrDigit() || it == '_' } -> "Solo se permiten letras, números y guión bajo."
+                else -> null
+            }
+        }
+
         /** Login acepta usuario o correo: si contiene '@' se valida como correo. */
         fun validateUserOrEmail(input: String): String? = when {
             input.isBlank() -> "Ingresa tu usuario o correo."
@@ -452,6 +463,14 @@ class AuthViewModel(
     fun updateVisualCondition(condition: String) {
         _registrationForm.update { it.copy(visualCondition = condition) }
         setRegisterStep(RegisterStep.SUMMARY_REVIEW)
+    }
+
+    fun setRegistrationUsername(username: String) {
+        _registrationForm.update { it.copy(username = username) }
+    }
+
+    suspend fun checkUsernameAvailability(username: String): Boolean {
+        return authRepository.isUsernameAvailable(username)
     }
 
     fun submitRegistration(onSuccess: (UserProfile) -> Unit) {
