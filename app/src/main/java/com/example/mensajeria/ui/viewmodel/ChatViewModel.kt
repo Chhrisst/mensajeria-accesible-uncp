@@ -75,7 +75,7 @@ class ChatViewModel(
     }
 
     private fun speakWelcome() {
-        val welcome = "Bienvenido al chat accesible de la UNCP. Mantén presionado el botón inferior para dictar, o pulsa las respuestas sugeridas por Inteligencia Artificial."
+        val welcome = "Bienvenido a la aplicación de mensajería. Mantén presionado el botón inferior para dictar, o pulsa las respuestas sugeridas por Inteligencia Artificial."
         ttsService.speak(welcome)
     }
 

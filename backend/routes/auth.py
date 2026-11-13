@@ -22,7 +22,14 @@ def check_pin_or_password(plain: str, hashed: str) -> bool:
     except Exception:
         return False
 
-import re
+def verify_credential(plain: str, stored: str) -> bool:
+    if not plain or not stored:
+        return False
+    # Si está guardado como hash bcrypt
+    if stored.startswith("$2b$") or stored.startswith("$2a$"):
+        return check_pin_or_password(plain, stored)
+    # Respaldo de compatibilidad para cuentas preexistentes en texto plano
+    return plain.strip().upper() == stored.strip().upper()
 
 def user_to_response(u: User) -> UserResponse:
     return UserResponse(
@@ -60,22 +67,19 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             detail="Usuario o correo no encontrado."
         )
 
-    # Verificación de contraseña o PIN (admite PIN directo, patrón de toques, o bcrypt)
     clean_pass = request.password_or_pin.strip()
-    is_valid = False
-
     if not clean_pass:
-        # En modo de voz cuando ya se reconoció la cuenta
-        is_valid = True
-    elif clean_pass.upper() == user.pin_code.upper():
-        is_valid = True
-    elif clean_pass.upper() == user.side_pattern.upper():
-        is_valid = True
-    elif clean_pass in ["123", "123456", "password"]:
-        is_valid = True
-    else:
-        if check_pin_or_password(clean_pass, user.password_hash):
-            is_valid = True
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Debe ingresar su contraseña o PIN."
+        )
+
+    # Verificación criptográfica segura de contraseña, PIN o patrón L-R
+    is_valid = (
+        verify_credential(clean_pass, user.pin_code) or
+        verify_credential(clean_pass.upper(), user.side_pattern) or
+        verify_credential(clean_pass, user.password_hash)
+    )
 
     if not is_valid:
         raise HTTPException(
@@ -106,11 +110,11 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
         candidate_username = f"{chosen_username}_{counter}"
         counter += 1
 
-    # Si no tiene correo (registro por voz de persona con discapacidad visual), autogenerar uno institucional
+    # Si no tiene correo (registro por voz de persona con discapacidad visual), autogenerar uno
     if request.email and request.email.strip():
         user_email = request.email.strip().lower()
     else:
-        user_email = f"{candidate_username}@uncp.pe"
+        user_email = f"{candidate_username}@messenger.pe"
 
     existing = db.query(User).filter(func.lower(User.email) == user_email).first()
     if existing:
@@ -119,16 +123,21 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
             detail="El correo electrónico ya se encuentra registrado."
         )
 
-    hashed_pw = hash_pin_or_password(request.pin if request.pin else "123")
+    raw_pin = request.pin.strip() if request.pin else "123"
+    raw_pattern = request.side_pattern.strip().upper() if request.side_pattern else "LRL"
+
+    hashed_pw = hash_pin_or_password(raw_pin)
+    hashed_pin = hash_pin_or_password(raw_pin)
+    hashed_pattern = hash_pin_or_password(raw_pattern)
     desc = "Con discapacidad" if request.has_disability else "Sin discapacidad"
 
     new_user = User(
-        name=request.full_name.strip() if request.full_name else "Nuevo Socio",
+        name=request.full_name.strip() if request.full_name else "Nuevo Usuario",
         username=candidate_username,
         email=user_email,
         password_hash=hashed_pw,
-        pin_code=request.pin.strip() if request.pin else "123",
-        side_pattern=request.side_pattern.strip() if request.side_pattern else "LRL",
+        pin_code=hashed_pin,
+        side_pattern=hashed_pattern,
         phone=request.phone.strip() if request.phone else None,
         dni=request.dni.strip() if request.dni else None,
         role="Usuario",

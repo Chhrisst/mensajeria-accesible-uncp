@@ -203,7 +203,7 @@ class ChatRepository(private val context: Context? = null) {
                     rawError
                 }
                 val finalMessage = if (response.code() == 404 || cleanError.contains("No se encontró", ignoreCase = true) || cleanError.contains("no existe", ignoreCase = true)) {
-                    "El usuario @$clean no existe en el sistema UNCP."
+                    "El usuario @$clean no existe en la aplicación de mensajería."
                 } else if (cleanError.isNotBlank()) {
                     cleanError
                 } else {

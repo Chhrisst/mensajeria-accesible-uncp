@@ -56,7 +56,7 @@ fun MainScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Mensajería UNCP IA",
+                        text = "Messenger",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = HighContrastYellow,

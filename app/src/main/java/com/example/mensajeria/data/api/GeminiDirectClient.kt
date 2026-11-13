@@ -42,7 +42,7 @@ object GeminiDirectClient {
         .build()
 
     suspend fun summarize(text: String): String = withContext(Dispatchers.IO) {
-        val prompt = "Eres un asistente accesible de la Unión Nacional de Ciegos del Perú. " +
+        val prompt = "Eres un asistente accesible de la aplicación de mensajería. " +
                 "Resume el siguiente mensaje en máximo 2 oraciones directas y claras para una persona invidente, " +
                 "priorizando fechas, horas o acciones:\n\n\"$text\""
         generateContent(prompt) ?: "No se pudo generar el resumen del mensaje."
@@ -70,7 +70,8 @@ object GeminiDirectClient {
         } else ""
 
         val prompt = """
-            Eres el Asistente de Voz Inteligente de la app de mensajería accesible para personas con discapacidad visual de la Unión Nacional de Ciegos del Perú (UNCP).
+            Eres el Asistente de Voz Inteligente de la aplicación de mensajería accesible para personas con discapacidad visual.
+            Cuando sea necesario referirte a la app, llámala simplemente "la aplicación de mensajería" o "Messenger".
             $historySection
             El usuario ahora te dijo: "$spokenText"
 

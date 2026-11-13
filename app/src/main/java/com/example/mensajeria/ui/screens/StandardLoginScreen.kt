@@ -116,7 +116,7 @@ fun StandardLoginScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    text = "Mensajería UNCP",
+                    text = "Messenger",
                     fontSize = 26.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White

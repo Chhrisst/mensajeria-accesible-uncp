@@ -168,7 +168,7 @@ fun StandardContactListScreen(
             ) {
                 Column {
                     Text(
-                        text = "Mensajería UNCP",
+                        text = "Messenger",
                         color = Color.White,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold

@@ -274,9 +274,9 @@ class AuthRepository(private val context: Context? = null) {
             val emailToSend = if (!form.email.isNullOrBlank()) {
                 form.email.trim().lowercase()
             } else {
-                val clean = form.fullName.filter { it.isLetterOrDigit() }.lowercase().ifBlank { "socio" }
+                val clean = form.fullName.filter { it.isLetterOrDigit() }.lowercase().ifBlank { "usuario" }
                 val suffix = java.util.UUID.randomUUID().toString().substring(0, 6)
-                "${clean}_${suffix}@uncp.pe"
+                "${clean}_${suffix}@messenger.pe"
             }
             val desc = if (form.hasDisability) "Con discapacidad" else "Sin discapacidad"
             val req = com.example.mensajeria.data.api.ApiRegisterRequest(

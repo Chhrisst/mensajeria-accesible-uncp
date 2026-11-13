@@ -199,7 +199,7 @@ fun AccessibleVoiceRegisterScreen(
         if (newPattern.length == 4) {
             authViewModel.soundService.playSuccessSound()
             authViewModel.vibrationService.vibrateSuccess()
-            authViewModel.ttsService.speak("Registrando en el sistema UNCP...")
+            authViewModel.ttsService.speak("Registrando tu cuenta...")
             coroutineScope.launch {
                 val form = RegistrationForm(
                     fullName = registeredName.trim(),
@@ -210,7 +210,7 @@ fun AccessibleVoiceRegisterScreen(
                 val result = authViewModel.authRepository.registerRemote(form)
                 val newUser = result.getOrNull() ?: authViewModel.authRepository.registerUser(form)
                 authViewModel.ttsService.speak(
-                    "Registro completado exitosamente. Tu nombre de usuario único es arroba ${newUser.username}. Compártelo para que puedan agregarte. Bienvenido ${newUser.name} a Mensajería UNCP."
+                    "Registro completado exitosamente. Tu nombre de usuario único es arroba ${newUser.username}. Compártelo para que puedan agregarte. Bienvenido ${newUser.name} a Messenger."
                 )
                 onRegistrationSuccess(newUser)
             }
