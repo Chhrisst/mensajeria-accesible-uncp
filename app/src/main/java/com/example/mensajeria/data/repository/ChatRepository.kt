@@ -135,17 +135,60 @@ class ChatRepository(private val context: Context? = null) {
         } else {
             c.visualCondition ?: ""
         }
-        val rawTime = c.lastMessageTime?.takeIf { Regex("^\\d{1,2}:\\d{2}$").matches(it.trim()) } ?: ""
+        val convertedTime = formatServerTimeToLocal(c.lastMessageTime ?: "")
         // Determinar estado de conexión: en línea si el servidor lo reporta o si hay actividad reciente
-        val isOnlineNow = (c.isOnline == true) || isTimeWithinMinutes(rawTime, 5)
+        val isOnlineNow = (c.isOnline == true) || isTimeWithinMinutes(convertedTime, 5)
         return Contact(
             id = id,
             name = name,
             username = username,
             description = decryptedDesc,
             isOnline = isOnlineNow,
-            lastSeenTime = rawTime
+            lastSeenTime = convertedTime
         )
+    }
+
+    /**
+     * Convierte la marca temporal enviada por el servidor en UTC (ya sea en formato ISO 8601 o "HH:mm")
+     * a la zona horaria local del dispositivo del usuario (ej: UTC-5 Perú).
+     */
+    fun formatServerTimeToLocal(raw: String): String {
+        val trimmed = raw.trim()
+        if (trimmed.isBlank() || trimmed.equals("Ahora", ignoreCase = true) || trimmed.equals("Hoy", ignoreCase = true)) {
+            return trimmed
+        }
+
+        // 1. Si viene en formato ISO 8601 completo (ej: 2026-11-13T05:56:00Z o con offset de zona)
+        try {
+            if (trimmed.contains("T")) {
+                val instant = java.time.Instant.parse(trimmed)
+                val localTime = instant.atZone(java.time.ZoneId.systemDefault())
+                return localTime.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+            }
+        } catch (_: Exception) {}
+
+        // 2. Si viene en formato HH:mm producido por el servidor (calculado en horario UTC)
+        val timeParts = trimmed.split(":")
+        if (timeParts.size == 2) {
+            val h = timeParts[0].toIntOrNull()
+            val m = timeParts[1].toIntOrNull()
+            if (h != null && m != null && h in 0..23 && m in 0..59) {
+                return try {
+                    val utcCal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+                    utcCal.set(java.util.Calendar.HOUR_OF_DAY, h)
+                    utcCal.set(java.util.Calendar.MINUTE, m)
+                    utcCal.set(java.util.Calendar.SECOND, 0)
+                    utcCal.set(java.util.Calendar.MILLISECOND, 0)
+
+                    val localFmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                    localFmt.timeZone = java.util.TimeZone.getDefault()
+                    localFmt.format(utcCal.time)
+                } catch (_: Exception) {
+                    trimmed
+                }
+            }
+        }
+        return trimmed
     }
 
     private fun isTimeWithinMinutes(hhMm: String, maxMinutes: Int): Boolean {
@@ -387,7 +430,7 @@ class ChatRepository(private val context: Context? = null) {
                         isVoiceNote = (m.messageType == "AUDIO"),
                         voiceDurationSeconds = m.audioDurationSeconds,
                         audioBase64 = clearAudio,
-                        formattedTime = m.createdAt ?: ""
+                        formattedTime = formatServerTimeToLocal(m.createdAt ?: "")
                     )
                 }
                 // Actualizar hora de última conexión del contacto según su último mensaje recibido
