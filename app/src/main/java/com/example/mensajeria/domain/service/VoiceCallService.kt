@@ -32,7 +32,9 @@ enum class CallSignalType {
     ACCEPT,
     REJECT,
     END,
-    AUDIO
+    AUDIO,
+    PRESENCE,
+    OFFLINE
 }
 
 data class VoiceCallSignal(
@@ -158,10 +160,34 @@ object CallSignalParser {
                     !item.isFromMe &&
                     (sig.callerId.isBlank() || sig.callerId != currentUserId) &&
                     sig.callId !in finishedOrAcceptedIds &&
-                    (nowMs - sig.timestampMs) in 0..maxAgeMs
+                    (nowMs - sig.timestampMs) in -120_000L..maxAgeMs
             }
             .maxByOrNull { (_, sig) -> sig.timestampMs }
             ?.second
+    }
+
+    /**
+     * Evalúa el estado de presencia del contacto a partir de sus señales entrantes (!item.isFromMe).
+     * Devuelve Pair(isOnline, latestTimestampMsOrNull).
+     */
+    fun computeContactPresence(
+        items: List<DecryptedCallStreamItem>,
+        maxOnlineAgeMs: Long = 180_000L,
+        nowMs: Long = System.currentTimeMillis()
+    ): Pair<Boolean, Long?> {
+        val latestIncomingSignal = items
+            .asSequence()
+            .filter { !it.isFromMe }
+            .mapNotNull { parse(it.content) }
+            .maxByOrNull { it.timestampMs }
+            ?: return false to null
+
+        if (latestIncomingSignal.type == CallSignalType.OFFLINE) {
+            return false to latestIncomingSignal.timestampMs
+        }
+        val ageMs = nowMs - latestIncomingSignal.timestampMs
+        val isOnline = ageMs in -120_000L..maxOnlineAgeMs
+        return isOnline to latestIncomingSignal.timestampMs
     }
 }
 
@@ -199,7 +225,16 @@ class VoiceCallService(private val context: Context) {
     @Volatile private var webSocket: WebSocket? = null
     @Volatile private var boundUserId: String = ""
     @Volatile private var wsConnected: Boolean = false
+    @Volatile private var isConnecting: Boolean = false
     @Volatile private var shouldStayConnected: Boolean = false
+    @Volatile private var wsUnsupportedOnServer: Boolean = false
+
+    private val reconnectRunnable = Runnable {
+        val uid = boundUserId
+        if (shouldStayConnected && uid.isNotBlank() && !wsConnected && !wsUnsupportedOnServer && !isConnecting) {
+            openSocketInternal(uid)
+        }
+    }
 
     @Volatile var listener: VoiceCallListener? = null
 
@@ -217,15 +252,19 @@ class VoiceCallService(private val context: Context) {
 
     fun connectWebSocket(userId: String) {
         val cleanId = userId.trim()
-        if (cleanId.isBlank()) return
-        if (boundUserId == cleanId && wsConnected && webSocket != null) return
+        if (cleanId.isBlank() || wsUnsupportedOnServer) return
+        if (boundUserId == cleanId && (wsConnected || isConnecting) && webSocket != null) return
 
         boundUserId = cleanId
         shouldStayConnected = true
+        mainHandler.removeCallbacks(reconnectRunnable)
         openSocketInternal(cleanId)
     }
 
     private fun openSocketInternal(userId: String) {
+        if (wsUnsupportedOnServer) return
+        isConnecting = true
+        mainHandler.removeCallbacks(reconnectRunnable)
         try {
             webSocket?.close(1000, "Reconnecting")
         } catch (_: Exception) {}
@@ -243,6 +282,7 @@ class VoiceCallService(private val context: Context) {
 
         webSocket = wsClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, response: Response) {
+                isConnecting = false
                 wsConnected = true
                 Log.d(TAG, "WebSocket de llamadas conectado para $userId")
             }
@@ -252,16 +292,25 @@ class VoiceCallService(private val context: Context) {
             }
 
             override fun onClosing(ws: WebSocket, code: Int, reason: String) {
+                isConnecting = false
                 wsConnected = false
             }
 
             override fun onClosed(ws: WebSocket, code: Int, reason: String) {
+                isConnecting = false
                 wsConnected = false
                 scheduleReconnectIfNeeded(userId)
             }
 
             override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
+                isConnecting = false
                 wsConnected = false
+                val code = response?.code
+                if (code == 403 || code == 404 || t.message?.contains("403") == true) {
+                    wsUnsupportedOnServer = true
+                    Log.i(TAG, "Servidor sin endpoint WS /api/calls/ws ($code); se usará canal HTTP CALL_STREAM.")
+                    return
+                }
                 Log.w(TAG, "WebSocket de llamadas desconectado (${t.message})")
                 scheduleReconnectIfNeeded(userId)
             }
@@ -269,18 +318,17 @@ class VoiceCallService(private val context: Context) {
     }
 
     private fun scheduleReconnectIfNeeded(userId: String) {
-        if (!shouldStayConnected || boundUserId != userId) return
-        mainHandler.postDelayed({
-            if (shouldStayConnected && boundUserId == userId && !wsConnected) {
-                openSocketInternal(userId)
-            }
-        }, 4000L)
+        if (!shouldStayConnected || boundUserId != userId || wsUnsupportedOnServer) return
+        mainHandler.removeCallbacks(reconnectRunnable)
+        mainHandler.postDelayed(reconnectRunnable, 4000L)
     }
 
     fun disconnectWebSocket() {
         shouldStayConnected = false
         boundUserId = ""
         wsConnected = false
+        isConnecting = false
+        mainHandler.removeCallbacks(reconnectRunnable)
         try {
             webSocket?.close(1000, "Session closed")
         } catch (_: Exception) {}

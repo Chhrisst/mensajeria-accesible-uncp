@@ -29,7 +29,7 @@ object GeminiDirectClient {
 
     private val API_KEY: String get() = com.example.mensajeria.BuildConfig.GEMINI_API_KEY
     private const val PRIMARY_MODEL = "gemini-flash-lite-latest"
-    private const val FALLBACK_MODEL = "gemini-3.8-flash"
+    private const val FALLBACK_MODEL = "gemini-2.5-flash"
 
     private const val TAG = "GeminiDirectClient"
 

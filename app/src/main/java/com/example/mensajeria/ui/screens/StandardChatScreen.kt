@@ -116,7 +116,7 @@ fun StandardChatScreen(
 
     val activeContact = if (uiState.contact.id == contact.id) uiState.contact else contact
 
-    LaunchedEffect(contact) {
+    LaunchedEffect(contact.id) {
         chatViewModel.isDisabilityMode = false
         chatViewModel.setContact(contact)
     }
@@ -180,11 +180,12 @@ fun StandardChatScreen(
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold
                         )
+                        val lastSeen = activeContact.getLastSeenDisplay()
                         Text(
-                            text = if (activeContact.isOnline) {
-                                "en línea"
-                            } else {
-                                "últ. vez a la(s) ${activeContact.getLastSeenDisplay()}"
+                            text = when {
+                                activeContact.isOnline -> "en línea"
+                                lastSeen.isNotBlank() -> "últ. vez a la(s) $lastSeen"
+                                else -> "desconectado"
                             },
                             color = if (activeContact.isOnline) whatsappGreen else TextSecondaryGray,
                             fontSize = 12.sp

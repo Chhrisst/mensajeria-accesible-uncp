@@ -30,23 +30,17 @@ data class Contact(
 ) {
     fun getLastSeenDisplay(): String {
         val raw = lastSeenTime?.trim().orEmpty()
-        if (Regex("^\\d{1,2}:\\d{2}$").matches(raw)) {
-            return raw
-        }
-        val safeId = id.ifBlank { name }
-        val cal = java.util.Calendar.getInstance()
-        val seed = (safeId.hashCode() and 0x7FFFFFFF) % 45 + 3
-        cal.add(java.util.Calendar.MINUTE, -seed)
-        return String.format(
-            java.util.Locale.getDefault(),
-            "%02d:%02d",
-            cal.get(java.util.Calendar.HOUR_OF_DAY),
-            cal.get(java.util.Calendar.MINUTE)
-        )
+        return if (Regex("^\\d{1,2}:\\d{2}$").matches(raw)) raw else ""
     }
 
     fun getConnectionStatusText(): String {
-        return if (isOnline) "En línea" else "Conectado última vez a la(s) ${getLastSeenDisplay()}"
+        if (isOnline) return "En línea"
+        val lastSeen = getLastSeenDisplay()
+        return if (lastSeen.isNotBlank()) {
+            "Conectado última vez a la(s) $lastSeen"
+        } else {
+            "Desconectado"
+        }
     }
 }
 

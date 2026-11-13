@@ -1,5 +1,6 @@
 package com.example.mensajeria
 
+import com.example.mensajeria.data.model.Contact
 import com.example.mensajeria.data.repository.ChatRepository
 import com.example.mensajeria.domain.service.CallSignalParser
 import com.example.mensajeria.domain.service.CallSignalType
@@ -77,5 +78,81 @@ class VoiceCallAndTimeTest {
         } finally {
             TimeZone.setDefault(originalTz)
         }
+    }
+
+    @Test
+    fun callSignalParser_acceptsIncomingInviteWithDeviceClockSkew() {
+        val receiverNow = 1_700_000_050_000L
+        // El reloj del emisor está 10 segundos adelantado respecto al receptor
+        val futureInvite = VoiceCallSignal(
+            type = CallSignalType.INVITE,
+            callId = "call-skew",
+            callerId = "juan",
+            callerName = "Juan",
+            timestampMs = receiverNow + 10_000L
+        )
+        val items = listOf(
+            DecryptedCallStreamItem("m1", "juan", "carlos", false, CallSignalParser.encode(futureInvite), "", "01:41")
+        )
+
+        val pending = CallSignalParser.findPendingIncomingInvite(items, currentUserId = "carlos", nowMs = receiverNow)
+        assertNotNull(pending)
+        assertEquals("call-skew", pending?.callId)
+    }
+
+    @Test
+    fun contactConnectionStatus_returnsDisconnectedWhenLastSeenIsEmpty() {
+        val neverSeen = Contact(id = "u1", name = "Cristian", isOnline = false, lastSeenTime = "")
+        assertEquals("", neverSeen.getLastSeenDisplay())
+        assertEquals("Desconectado", neverSeen.getConnectionStatusText())
+
+        val seenEarlier = Contact(id = "u2", name = "Mario", isOnline = false, lastSeenTime = "01:06")
+        assertEquals("01:06", seenEarlier.getLastSeenDisplay())
+        assertEquals("Conectado última vez a la(s) 01:06", seenEarlier.getConnectionStatusText())
+
+        val online = Contact(id = "u3", name = "Carlos", isOnline = true, lastSeenTime = "01:41")
+        assertEquals("En línea", online.getConnectionStatusText())
+    }
+
+    @Test
+    fun callSignalParser_computeContactPresence_distinguishesOnlineOfflineAndExpired() {
+        val now = 1_700_000_200_000L
+
+        val recentPresence = DecryptedCallStreamItem(
+            "p1", "carlos", "juan", false,
+            CallSignalParser.encode(VoiceCallSignal(CallSignalType.PRESENCE, "pr1", "carlos", "Carlos", now - 30_000L)),
+            "", "01:40"
+        )
+        val (online1, ts1) = CallSignalParser.computeContactPresence(listOf(recentPresence), nowMs = now)
+        assertTrue(online1)
+        assertEquals(now - 30_000L, ts1)
+
+        val offlineSignal = DecryptedCallStreamItem(
+            "p2", "carlos", "juan", false,
+            CallSignalParser.encode(VoiceCallSignal(CallSignalType.OFFLINE, "off1", "carlos", "Carlos", now - 5_000L)),
+            "", "01:41"
+        )
+        val (online2, ts2) = CallSignalParser.computeContactPresence(listOf(recentPresence, offlineSignal), nowMs = now)
+        assertFalse(online2)
+        assertEquals(now - 5_000L, ts2)
+
+        val expiredPresence = DecryptedCallStreamItem(
+            "p3", "mario", "juan", false,
+            CallSignalParser.encode(VoiceCallSignal(CallSignalType.PRESENCE, "pr2", "mario", "Mario", now - 300_000L)),
+            "", "01:06"
+        )
+        val (online3, ts3) = CallSignalParser.computeContactPresence(listOf(expiredPresence), nowMs = now)
+        assertFalse(online3)
+        assertEquals(now - 300_000L, ts3)
+
+        // Las señales salientes propias (!isFromMe == false) nunca deben marcar al contacto en línea
+        val outgoingOnly = DecryptedCallStreamItem(
+            "p4", "juan", "cristian", true,
+            CallSignalParser.encode(VoiceCallSignal(CallSignalType.PRESENCE, "pr3", "juan", "Juan", now - 1_000L)),
+            "", "01:42"
+        )
+        val (online4, ts4) = CallSignalParser.computeContactPresence(listOf(outgoingOnly), nowMs = now)
+        assertFalse(online4)
+        assertNull(ts4)
     }
 }

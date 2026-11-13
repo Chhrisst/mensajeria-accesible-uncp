@@ -322,10 +322,15 @@ fun AccessibleContactListScreen(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
+                                    val lastSeen = contact.getLastSeenDisplay()
                                     Text(
                                         text = buildString {
                                             if (contact.username.isNotBlank()) append("@${contact.username} • ")
-                                            append(if (contact.isOnline) "● En línea" else "Últ. vez ${contact.getLastSeenDisplay()}")
+                                            when {
+                                                contact.isOnline -> append("● En línea")
+                                                lastSeen.isNotBlank() -> append("Últ. vez $lastSeen")
+                                                else -> append("Desconectado")
+                                            }
                                         },
                                         fontSize = 13.sp,
                                         color = if (isFocused) Color(0xFF262626) else if (contact.isOnline) Color(0xFF00E676) else TextSecondaryGray,

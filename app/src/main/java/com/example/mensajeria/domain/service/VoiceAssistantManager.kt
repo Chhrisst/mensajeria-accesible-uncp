@@ -97,6 +97,7 @@ class VoiceAssistantManager(
 
     private val dialogueHistory = mutableListOf<Pair<String, String>>()
     private var pendingAction: String? = null
+    private var pendingTargetContact: String? = null
     private var processingJob: Job? = null
     private var interactionToken = 0L
 
@@ -201,12 +202,12 @@ class VoiceAssistantManager(
             val currentTimeText = formatCurrentDateTimeForVoice()
             val weatherText = fetchWeatherSummary()
 
-            // Atajo instantáneo y preciso para preguntas comunes de la vida diaria
+            // Atajo instantáneo y preciso para preguntas comunes y acciones directas/multi-turno
             val localCommonReply = tryHandleCommonQuestionLocally(
                 query = cleanCommand,
                 currentTimeText = currentTimeText,
                 weatherText = weatherText
-            )
+            ) ?: tryHandleActionCommandLocally(cleanCommand)
 
             val result = if (localCommonReply != null) {
                 localCommonReply
@@ -281,6 +282,18 @@ class VoiceAssistantManager(
                     (result.action == "SEND_MESSAGE" && result.messageText.isNullOrBlank())
                 )
 
+            if (isQuestion) {
+                if (result.action == "SEND_MESSAGE" && result.messageText.isNullOrBlank()) {
+                    pendingAction = "SEND_MESSAGE"
+                    pendingTargetContact = result.targetContact ?: getActiveChatContact()?.name
+                } else if (result.action == "ADD_CONTACT" && result.contactName.isNullOrBlank() && result.targetContact.isNullOrBlank()) {
+                    pendingAction = "ADD_CONTACT"
+                }
+            } else {
+                pendingAction = null
+                pendingTargetContact = null
+            }
+
             val speechToSpeak = if (isQuestion) {
                 if (rawSpoken.contains("después del tono", ignoreCase = true)) rawSpoken
                 else "$rawSpoken Habla después del tono."
@@ -352,6 +365,112 @@ class VoiceAssistantManager(
                 action = "GENERAL_REPLY",
                 spokenResponse = "Tu nombre es $fullName y tu nombre de usuario único es arroba $handle."
             )
+        }
+
+        return null
+    }
+
+    private fun tryHandleActionCommandLocally(rawCommand: String): VoiceCommandResult? {
+        val trimmed = rawCommand.trim()
+        if (trimmed.isBlank()) return null
+        val lower = trimmed.lowercase(Locale.getDefault())
+            .replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+
+        if (lower in setOf("cancelar", "cancela", "olvidalo", "nada", "dejalo")) {
+            pendingAction = null
+            pendingTargetContact = null
+            return VoiceCommandResult(
+                action = "GENERAL_REPLY",
+                spokenResponse = "Operación cancelada."
+            )
+        }
+
+        // Respuesta directa a pregunta pendiente del asistente en diálogo multi-turno
+        val currentPending = pendingAction
+        if (currentPending == "SEND_MESSAGE") {
+            val target = pendingTargetContact ?: getActiveChatContact()?.name
+            pendingAction = null
+            pendingTargetContact = null
+            val polished = IntonationPunctuationPolisher.polish(trimmed)
+            return VoiceCommandResult(
+                action = "SEND_MESSAGE",
+                targetContact = target,
+                messageText = polished,
+                spokenResponse = "Mensaje enviado: $polished"
+            )
+        }
+        if (currentPending == "ADD_CONTACT") {
+            pendingAction = null
+            return VoiceCommandResult(
+                action = "ADD_CONTACT",
+                contactName = trimmed,
+                spokenResponse = "Buscando a $trimmed para agregarlo."
+            )
+        }
+
+        val activeChat = getActiveChatContact()
+        val isInChat = getCurrentScreen() == "CHAT" && activeChat != null
+
+        // Nota de voz directa (evaluar antes que "enviar")
+        if (isInChat && (lower.contains("nota de voz") || lower.contains("graba un audio") || lower.contains("grabar audio") || lower.contains("enviar audio") || lower.contains("envia audio"))) {
+            return VoiceCommandResult(
+                action = "SEND_VOICE_NOTE",
+                spokenResponse = "Iniciando grabación de nota de voz. Habla y luego toca enviar."
+            )
+        }
+
+        // Lectura rápida de mensajes recientes
+        if (isInChat && (lower.contains("leer mensajes") || lower.contains("lee los mensajes") || lower.contains("ultimo mensaje") || lower.contains("que me dijo"))) {
+            val recent = chatRepository.messages.value.takeLast(3)
+            val reply = if (recent.isEmpty()) {
+                "Aún no hay mensajes en esta conversación."
+            } else {
+                recent.joinToString(". ") { msg ->
+                    val who = if (msg.isOutgoing) "Tú dijiste" else "${activeChat?.name ?: "Contacto"} dijo"
+                    "$who: ${msg.text}"
+                }
+            }
+            return VoiceCommandResult(
+                action = "READ_MESSAGES",
+                spokenResponse = reply
+            )
+        }
+
+        // Llamada de voz directa
+        if (lower.startsWith("llama a ") || lower.startsWith("llamar a ") || lower == "llamar" || lower == "hacer una llamada" || lower == "iniciar llamada") {
+            val targetName = trimmed
+                .replace(Regex("(?i)^(llama|llamar)\\s+a\\s+"), "")
+                .takeIf { !lower.startsWith("hacer") && !lower.startsWith("iniciar") && lower != "llamar" }
+            val resolvedTarget = if (!targetName.isNullOrBlank()) findContact(targetName)?.name ?: targetName else activeChat?.name
+            if (resolvedTarget != null) {
+                return VoiceCommandResult(
+                    action = "START_CALL",
+                    targetContact = resolvedTarget,
+                    spokenResponse = "Iniciando llamada con $resolvedTarget."
+                )
+            }
+        }
+
+        // Envío directo de mensaje dentro del chat con prefijos comunes
+        if (isInChat) {
+            val chatSendPrefixes = listOf(
+                Regex("(?i)^env[ií]a(?:r)?\\s+(?:un\\s+)?mensaje\\s+(?:que\\s+diga|diciendo)\\s+(.+)$"),
+                Regex("(?i)^env[ií]a(?:r)?\\s+el\\s+mensaje\\s+(.+)$"),
+                Regex("(?i)^(?:dile|di|env[ií]a|enviar|manda|mandar|escribe|escribir)\\s+(.+)$")
+            )
+            for (regex in chatSendPrefixes) {
+                val match = regex.matchEntire(trimmed)
+                val body = match?.groupValues?.getOrNull(1)?.trim().orEmpty()
+                if (body.isNotBlank() && !body.contains("nota de voz", ignoreCase = true) && !body.startsWith("un mensaje", ignoreCase = true)) {
+                    val polished = IntonationPunctuationPolisher.polish(body)
+                    return VoiceCommandResult(
+                        action = "SEND_MESSAGE",
+                        targetContact = activeChat?.name,
+                        messageText = polished,
+                        spokenResponse = "Mensaje enviado: $polished"
+                    )
+                }
+            }
         }
 
         return null
@@ -505,10 +624,11 @@ class VoiceAssistantManager(
                     val polishedText = IntonationPunctuationPolisher.polish(rawText)
                     val target = result.targetContact
                     val targetContact = if (!target.isNullOrBlank()) findContact(target) else null
-                    if (targetContact != null) {
+                    val currentActive = getActiveChatContact()
+                    if (targetContact != null && (getCurrentScreen() != "CHAT" || currentActive?.id != targetContact.id)) {
                         onOpenChat?.invoke(targetContact)
                     }
-                    val recipient = targetContact ?: getActiveChatContact()
+                    val recipient = targetContact ?: currentActive
                     val userId = getCurrentUserId()
                     if (recipient != null && recipient.id.isNotBlank() && userId.isNotBlank()) {
                         scope.launch {
@@ -556,6 +676,7 @@ class VoiceAssistantManager(
         if (clearDialogue) {
             dialogueHistory.clear()
             pendingAction = null
+            pendingTargetContact = null
         }
         _state.update {
             it.copy(

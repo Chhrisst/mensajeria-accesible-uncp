@@ -4,11 +4,13 @@ import android.content.Context
 import android.util.Log
 import com.example.mensajeria.data.api.ApiAddContactRequest
 import com.example.mensajeria.data.api.ApiContactResponse
+import com.example.mensajeria.data.api.ApiMessageResponse
 import com.example.mensajeria.data.api.ApiSendMessageRequest
 import com.example.mensajeria.data.api.RetrofitClient
 import com.example.mensajeria.data.model.Contact
 import com.example.mensajeria.data.model.Message
 import com.example.mensajeria.domain.service.CallSignalParser
+import com.example.mensajeria.domain.service.CallSignalType
 import com.example.mensajeria.domain.service.DecryptedCallStreamItem
 import com.example.mensajeria.domain.service.E2EEncryptionManager
 import com.google.gson.Gson
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Repositorio de mensajería para gestionar conversaciones y contactos.
@@ -43,6 +46,10 @@ class ChatRepository(private val context: Context? = null) {
     // Mensajes enviados desde este dispositivo que el servidor aún no confirmó (en vuelo o fallidos).
     // Se conservan al refrescar desde el servidor para que no "desaparezcan" de la conversación.
     private val unsyncedMessageIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+    // Estado real de presencia por contacto (calculado estrictamente con actividad entrante !isFromMe)
+    private val contactIncomingPresence = ConcurrentHashMap<String, Pair<Boolean, String>>()
+    private val contactLastRealMessage = ConcurrentHashMap<String, String>()
 
     private val _contacts = MutableStateFlow<List<Contact>>(emptyList())
     val contacts: StateFlow<List<Contact>> = _contacts.asStateFlow()
@@ -87,6 +94,14 @@ class ChatRepository(private val context: Context? = null) {
                 // que luego provocarían NullPointerException en la UI o en el asistente de voz.
                 val validContacts = savedList.mapNotNull { sanitizeContact(it) }
                     .filter { !it.id.startsWith("c_") }
+                    .map { c ->
+                        val known = contactIncomingPresence[c.id]
+                        if (known != null) {
+                            c.copy(isOnline = known.first, lastSeenTime = known.second)
+                        } else {
+                            c.copy(isOnline = false)
+                        }
+                    }
                 _contacts.value = validContacts
             }
         } catch (e: Exception) {
@@ -141,19 +156,33 @@ class ChatRepository(private val context: Context? = null) {
             c.visualCondition ?: ""
         }
         val isCallSignal = CallSignalParser.isCallControlContent(rawDecrypted)
-        val displayDesc = if (isCallSignal) "📞 Llamada de voz" else rawDecrypted
-        val convertedTime = formatServerTimeToLocal(c.lastMessageTime ?: "")
-        // Determinar estado de conexión: en línea si el servidor lo reporta o si hay actividad reciente
-        val isOnlineNow = (c.isOnline == true) || isTimeWithinMinutes(convertedTime, 5)
+        val parsedSignal = if (isCallSignal) CallSignalParser.parse(rawDecrypted) else null
+        if (!isCallSignal && rawLastMsg.isNotBlank() && rawDecrypted.isNotBlank()) {
+            contactLastRealMessage[id] = rawDecrypted
+        }
+        val displayDesc = if (isCallSignal) {
+            if (parsedSignal?.type == CallSignalType.PRESENCE || parsedSignal?.type == CallSignalType.OFFLINE) {
+                contactLastRealMessage[id] ?: (c.visualCondition ?: "")
+            } else {
+                "📞 Llamada de voz"
+            }
+        } else {
+            rawDecrypted
+        }
+        // Determinar estado de conexión estrictamente desde la actividad entrante del propio contacto (!isFromMe),
+        // nunca desde c.lastMessageTime (que incluye mensajes enviados por el usuario actual).
+        val knownPresence = contactIncomingPresence[id]
+        val isOnlineNow = (c.isOnline == true) || (knownPresence?.first == true)
+        val resolvedLastSeen = knownPresence?.second ?: ""
         val contactObj = Contact(
             id = id,
             name = name,
             username = username,
             description = displayDesc,
             isOnline = isOnlineNow,
-            lastSeenTime = convertedTime
+            lastSeenTime = resolvedLastSeen
         )
-        if (isCallSignal) {
+        if (isCallSignal && parsedSignal?.type == CallSignalType.INVITE) {
             onCallSignalDetectedFromContact?.invoke(contactObj, rawDecrypted)
         }
         return contactObj
@@ -425,59 +454,15 @@ class ChatRepository(private val context: Context? = null) {
             // Si mientras esperábamos la red el usuario abrió otra conversación, descartar esta respuesta
             if (conversationKey != currentConversationKey) return _messages.value
             if (response.isSuccessful && apiMsgs != null) {
-                val callStreamItems = mutableListOf<DecryptedCallStreamItem>()
-                val mapped = apiMsgs.mapNotNull { m ->
-                    val id = m?.id?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                    val isFromMe = m.isFromMe || (m.senderId == userId)
-                    val clearContent = E2EEncryptionManager.decrypt(m.content ?: "", userId, contactId)
-                    val clearAudio = if (!m.audioUrl.isNullOrBlank()) {
-                        E2EEncryptionManager.decrypt(m.audioUrl, userId, contactId)
-                    } else ""
-                    if (m.messageType == "CALL_STREAM") {
-                        callStreamItems.add(
-                            DecryptedCallStreamItem(
-                                id = id,
-                                senderId = m.senderId ?: "",
-                                receiverId = m.receiverId ?: "",
-                                isFromMe = isFromMe,
-                                content = clearContent,
-                                audioBase64 = clearAudio,
-                                createdAt = m.createdAt ?: ""
-                            )
-                        )
-                        return@mapNotNull null
-                    }
-                    Message(
-                        id = id,
-                        text = clearContent,
-                        isOutgoing = isFromMe,
-                        senderName = if (isFromMe) "Tú" else "Contacto",
-                        isVoiceNote = (m.messageType == "AUDIO"),
-                        voiceDurationSeconds = m.audioDurationSeconds,
-                        audioBase64 = clearAudio,
-                        formattedTime = formatServerTimeToLocal(m.createdAt ?: "")
-                    )
+                val parsed = parseApiMessages(userId, contactId, apiMsgs)
+                if (parsed.callSignals.isNotEmpty()) {
+                    onCallStreamMessagesLoaded?.invoke(contactId, parsed.callSignals)
                 }
-                if (callStreamItems.isNotEmpty()) {
-                    onCallStreamMessagesLoaded?.invoke(contactId, callStreamItems)
-                }
-                // Actualizar hora de última conexión del contacto según su último mensaje recibido
-                val lastIncoming = mapped.lastOrNull { !it.isOutgoing }
-                val incomingTime = lastIncoming?.formattedTime.orEmpty()
-                if (incomingTime.isNotBlank()) {
-                    val isNowOnline = isTimeWithinMinutes(incomingTime, 5)
-                    _contacts.update { list ->
-                        list.map { c ->
-                            if (c.id == contactId) {
-                                c.copy(isOnline = c.isOnline || isNowOnline, lastSeenTime = incomingTime)
-                            } else c
-                        }
-                    }
-                }
-                val serverIds = mapped.mapTo(HashSet()) { it.id }
+                updateContactPresenceFromApiMessages(contactId, parsed)
+                val serverIds = parsed.messages.mapTo(HashSet()) { it.id }
                 // Conservar los mensajes locales aún no confirmados por el servidor
                 val pendingLocal = _messages.value.filter { it.id in unsyncedMessageIds && it.id !in serverIds }
-                val merged = mapped + pendingLocal
+                val merged = parsed.messages + pendingLocal
                 _messages.value = merged
                 persistMessages(userId, contactId)
                 merged
@@ -493,24 +478,34 @@ class ChatRepository(private val context: Context? = null) {
         }
     }
 
-    /**
-     * Consulta los paquetes CALL_STREAM de un contacto sin alterar la conversación activa en _messages.
-     */
-    suspend fun fetchCallStreamSignals(userId: String, contactId: String): List<DecryptedCallStreamItem> {
-        if (userId.isBlank() || contactId.isBlank()) return emptyList()
-        return try {
-            val response = RetrofitClient.api.getMessages(userId, contactId)
-            val apiMsgs = response.body() ?: return emptyList()
-            if (!response.isSuccessful) return emptyList()
-            apiMsgs.mapNotNull { m ->
-                val id = m?.id?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                if (m.messageType != "CALL_STREAM") return@mapNotNull null
-                val isFromMe = m.isFromMe || (m.senderId == userId)
-                val clearContent = E2EEncryptionManager.decrypt(m.content ?: "", userId, contactId)
-                val clearAudio = if (!m.audioUrl.isNullOrBlank()) {
-                    E2EEncryptionManager.decrypt(m.audioUrl, userId, contactId)
-                } else ""
-                DecryptedCallStreamItem(
+    private data class ParsedMessagesResult(
+        val messages: List<Message>,
+        val callSignals: List<DecryptedCallStreamItem>,
+        val lastIncomingHhMm: String,
+        val lastIncomingWasOffline: Boolean
+    )
+
+    private fun parseApiMessages(
+        userId: String,
+        contactId: String,
+        apiMsgs: List<ApiMessageResponse?>
+    ): ParsedMessagesResult {
+        val callStreamItems = mutableListOf<DecryptedCallStreamItem>()
+        val timeFmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+        var lastIncomingHhMm = ""
+        var lastIncomingWasOffline = false
+
+        val mapped = apiMsgs.mapNotNull { m ->
+            val id = m?.id?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val isFromMe = m.isFromMe || (m.senderId == userId)
+            val clearContent = E2EEncryptionManager.decrypt(m.content ?: "", userId, contactId)
+            val clearAudio = if (!m.audioUrl.isNullOrBlank()) {
+                E2EEncryptionManager.decrypt(m.audioUrl, userId, contactId)
+            } else ""
+            val localMsgTime = formatServerTimeToLocal(m.createdAt ?: "")
+
+            if (m.messageType == "CALL_STREAM") {
+                val item = DecryptedCallStreamItem(
                     id = id,
                     senderId = m.senderId ?: "",
                     receiverId = m.receiverId ?: "",
@@ -519,7 +514,92 @@ class ChatRepository(private val context: Context? = null) {
                     audioBase64 = clearAudio,
                     createdAt = m.createdAt ?: ""
                 )
+                callStreamItems.add(item)
+                if (!isFromMe) {
+                    val sig = CallSignalParser.parse(clearContent)
+                    lastIncomingWasOffline = (sig?.type == CallSignalType.OFFLINE)
+                    val sigTime = if (sig != null && sig.timestampMs > 0L) {
+                        timeFmt.format(java.util.Date(sig.timestampMs))
+                    } else {
+                        localMsgTime
+                    }
+                    if (sigTime.isNotBlank()) lastIncomingHhMm = sigTime
+                }
+                return@mapNotNull null
             }
+
+            if (!isFromMe) {
+                lastIncomingWasOffline = false
+                if (localMsgTime.isNotBlank()) lastIncomingHhMm = localMsgTime
+            }
+
+            Message(
+                id = id,
+                text = clearContent,
+                isOutgoing = isFromMe,
+                senderName = if (isFromMe) "Tú" else "Contacto",
+                isVoiceNote = (m.messageType == "AUDIO"),
+                voiceDurationSeconds = m.audioDurationSeconds,
+                audioBase64 = clearAudio,
+                formattedTime = localMsgTime
+            )
+        }
+        return ParsedMessagesResult(
+            messages = mapped,
+            callSignals = callStreamItems,
+            lastIncomingHhMm = lastIncomingHhMm,
+            lastIncomingWasOffline = lastIncomingWasOffline
+        )
+    }
+
+    private fun updateContactPresenceFromApiMessages(
+        contactId: String,
+        parsed: ParsedMessagesResult
+    ) {
+        val lastReal = parsed.messages.lastOrNull()?.text?.takeIf { it.isNotBlank() }
+        if (lastReal != null) {
+            contactLastRealMessage[contactId] = lastReal
+        }
+
+        val (signalOnline, _) = CallSignalParser.computeContactPresence(parsed.callSignals)
+        val lastIncomingMsg = parsed.messages.lastOrNull { !it.isOutgoing }
+        val isOnlineNow = if (parsed.lastIncomingWasOffline) {
+            false
+        } else {
+            signalOnline || (lastIncomingMsg != null && isTimeWithinMinutes(lastIncomingMsg.formattedTime, 3))
+        }
+        val lastSeenHhMm = parsed.lastIncomingHhMm
+        contactIncomingPresence[contactId] = isOnlineNow to lastSeenHhMm
+
+        _contacts.update { list ->
+            list.map { c ->
+                if (c.id == contactId) {
+                    c.copy(
+                        isOnline = isOnlineNow,
+                        lastSeenTime = lastSeenHhMm,
+                        description = lastReal ?: c.description
+                    )
+                } else c
+            }
+        }
+        if (currentActiveUserId.isNotBlank()) {
+            persistContacts(currentActiveUserId)
+        }
+    }
+
+    /**
+     * Consulta los paquetes CALL_STREAM de un contacto sin alterar la conversación activa en _messages,
+     * aprovechando la respuesta para actualizar el estado real de presencia y última conexión.
+     */
+    suspend fun fetchCallStreamSignals(userId: String, contactId: String): List<DecryptedCallStreamItem> {
+        if (userId.isBlank() || contactId.isBlank()) return emptyList()
+        return try {
+            val response = RetrofitClient.api.getMessages(userId, contactId)
+            val apiMsgs = response.body() ?: return emptyList()
+            if (!response.isSuccessful) return emptyList()
+            val parsed = parseApiMessages(userId, contactId, apiMsgs)
+            updateContactPresenceFromApiMessages(contactId, parsed)
+            parsed.callSignals
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {

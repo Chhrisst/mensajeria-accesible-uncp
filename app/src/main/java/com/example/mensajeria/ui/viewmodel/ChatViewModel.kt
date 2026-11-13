@@ -123,11 +123,35 @@ class ChatViewModel(
                 parsed.type == CallSignalType.INVITE &&
                 !_uiState.value.isInCall &&
                 parsed.callId !in handledIncomingCallIds &&
-                (System.currentTimeMillis() - parsed.timestampMs) in 0..90_000L
+                (System.currentTimeMillis() - parsed.timestampMs) in -120_000L..90_000L
             ) {
                 viewModelScope.launch {
                     val signals = repository.fetchCallStreamSignals(currentUserId, contact.id)
                     processCallStreamSignals(contact.id, signals)
+                }
+            }
+        }
+
+        // Mantener sincronizados el estado de conexión y los datos del contacto activo
+        viewModelScope.launch {
+            repository.contacts.collect { contactsList ->
+                _uiState.update { state ->
+                    val currentContactId = state.contact.id
+                    val updatedContact = if (currentContactId.isNotBlank()) {
+                        contactsList.find { it.id == currentContactId }
+                    } else null
+                    val partnerId = state.callPartner?.id
+                    val updatedPartner = if (!partnerId.isNullOrBlank()) {
+                        contactsList.find { it.id == partnerId }
+                    } else null
+                    var next = state
+                    if (updatedContact != null && updatedContact != state.contact) {
+                        next = next.copy(contact = updatedContact)
+                    }
+                    if (updatedPartner != null && updatedPartner != state.callPartner) {
+                        next = next.copy(callPartner = updatedPartner)
+                    }
+                    next
                 }
             }
         }
@@ -458,19 +482,77 @@ class ChatViewModel(
     private fun startIncomingCallMonitor() {
         incomingCallPollingJob?.cancel()
         incomingCallPollingJob = viewModelScope.launch {
+            var cycle = 0
+            var lastPresenceSentMs = 0L
             while (currentUserId.isNotBlank()) {
-                delay(2800L)
-                if (_uiState.value.isInCall) continue
-                // Sincroniza contactos para detectar señales CALL_STREAM entrantes incluso fuera de un chat
-                val activeContacts = repository.contacts.value
-                for (c in activeContacts.take(6)) {
-                    if (_uiState.value.isInCall) break
-                    val signals = repository.fetchCallStreamSignals(currentUserId, c.id)
-                    if (signals.isNotEmpty()) {
-                        processCallStreamSignals(c.id, signals)
+                val uid = currentUserId
+                val uname = currentUserName
+                if (cycle == 0 || cycle % 3 == 0) {
+                    repository.syncContactsFromRemote(uid)
+                }
+                val activeContacts = repository.contacts.value.filter { !it.id.startsWith("c_") }
+                val nowMs = System.currentTimeMillis()
+                if (activeContacts.isNotEmpty() && nowMs - lastPresenceSentMs >= 60_000L) {
+                    lastPresenceSentMs = nowMs
+                    broadcastPresenceSignal(CallSignalType.PRESENCE, uid, uname, activeContacts)
+                }
+                if (!_uiState.value.isInCall) {
+                    for (c in activeContacts.take(8)) {
+                        if (_uiState.value.isInCall || currentUserId != uid) break
+                        val signals = repository.fetchCallStreamSignals(uid, c.id)
+                        if (signals.isNotEmpty()) {
+                            processCallStreamSignals(c.id, signals)
+                        }
                     }
                 }
+                cycle++
+                delay(1800L)
             }
+        }
+    }
+
+    private suspend fun broadcastPresenceSignal(
+        type: CallSignalType,
+        userId: String,
+        userName: String,
+        contacts: List<Contact>
+    ) {
+        if (userId.isBlank() || contacts.isEmpty()) return
+        val ts = System.currentTimeMillis()
+        val encoded = CallSignalParser.encode(
+            VoiceCallSignal(
+                type = type,
+                callId = "presence_${userId.take(8)}_$ts",
+                callerId = userId,
+                callerName = userName,
+                timestampMs = ts
+            )
+        )
+        for (c in contacts.take(8)) {
+            if (c.id.startsWith("c_") || c.id.isBlank()) continue
+            try {
+                repository.sendMessageRemote(
+                    userId = userId,
+                    contactId = c.id,
+                    text = encoded,
+                    messageTypeOverride = "CALL_STREAM"
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * Notifica desconexión antes de cerrar sesión.
+     */
+    fun notifyUserOffline() {
+        val uid = currentUserId
+        val uname = currentUserName
+        val snapshot = repository.contacts.value.filter { !it.id.startsWith("c_") }
+        if (uid.isBlank() || snapshot.isEmpty()) return
+        viewModelScope.launch {
+            broadcastPresenceSignal(CallSignalType.OFFLINE, uid, uname, snapshot)
         }
     }
 
@@ -541,6 +623,8 @@ class ChatViewModel(
             CallSignalType.REJECT -> "CALL_REJECT"
             CallSignalType.END -> "CALL_END"
             CallSignalType.AUDIO -> "CALL_AUDIO"
+            CallSignalType.PRESENCE -> "CALL_PRESENCE"
+            CallSignalType.OFFLINE -> "CALL_OFFLINE"
         }
         voiceCallService.sendWebSocketSignal(
             type = wsType,
@@ -980,10 +1064,19 @@ class ChatViewModel(
     }
 
     fun setContact(contact: Contact, userId: String = "") {
+        val sameContactActive = _uiState.value.contact.id == contact.id &&
+            contact.id.isNotBlank() &&
+            pollingJob?.isActive == true &&
+            (userId.isBlank() || userId == currentUserId)
+        if (sameContactActive) {
+            return
+        }
+
         refineJob?.cancel()
+        val resolvedContact = repository.contacts.value.find { it.id == contact.id } ?: contact
         _uiState.update {
             it.copy(
-                contact = contact,
+                contact = resolvedContact,
                 voiceState = VoiceState.IDLE,
                 pendingSpokenText = "",
                 smartReplies = emptyList()
@@ -993,7 +1086,7 @@ class ChatViewModel(
             currentUserId = userId
         }
         if (isDisabilityMode) {
-            ttsService.speak("Conversación abierta con ${contact.name}.")
+            ttsService.speak("Conversación abierta con ${resolvedContact.name}.")
         }
 
         // Cargar mensajes de la base de datos
@@ -1018,7 +1111,7 @@ class ChatViewModel(
         pollingJob?.cancel()
         pollingJob = viewModelScope.launch {
             while (true) {
-                kotlinx.coroutines.delay(4000)
+                kotlinx.coroutines.delay(2000L)
                 val contactId = _uiState.value.contact.id
                 if (currentUserId.isNotBlank() && contactId.isNotBlank()) {
                     repository.loadMessagesFromRemote(currentUserId, contactId, loadLocalFirst = false)

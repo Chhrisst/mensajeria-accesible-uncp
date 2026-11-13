@@ -250,7 +250,9 @@ fun MensajeriaApp(
             currentScreen = AppFlowScreen.ACCESSIBLE_CONTACTS
         }
         voiceAssistantManager.onLogout = {
+            chatViewModel.notifyUserOffline()
             chatViewModel.stopPolling()
+            voiceAssistantManager.stopAssistant()
             authViewModel.logout()
             currentScreen = AppFlowScreen.ACCESSIBLE_WELCOME
         }
@@ -276,8 +278,14 @@ fun MensajeriaApp(
         voiceAssistantManager.onStartVoiceNote = {
             chatViewModel.startVoiceNoteRecording()
         }
+    }
 
-        voiceAssistantManager.stopAssistant()
+    val inAccessibleSession = currentScreen == AppFlowScreen.ACCESSIBLE_CONTACTS ||
+        currentScreen == AppFlowScreen.ACCESSIBLE_CHAT
+    androidx.compose.runtime.LaunchedEffect(inAccessibleSession, currentUser.id) {
+        if (!inAccessibleSession || currentUser.id.isBlank()) {
+            voiceAssistantManager.stopAssistant()
+        }
     }
 
     val isExploreEnabled = when (currentScreen) {
@@ -413,6 +421,7 @@ fun MensajeriaApp(
                     currentScreen = AppFlowScreen.ACCESSIBLE_CHAT
                 },
                 onLogout = {
+                    chatViewModel.notifyUserOffline()
                     authViewModel.logout()
                     currentScreen = AppFlowScreen.ACCESSIBLE_WELCOME
                 }
@@ -490,6 +499,7 @@ fun MensajeriaApp(
                     currentScreen = AppFlowScreen.STANDARD_CHAT
                 },
                 onLogout = {
+                    chatViewModel.notifyUserOffline()
                     authViewModel.logout()
                     currentScreen = AppFlowScreen.STANDARD_LOGIN
                 }

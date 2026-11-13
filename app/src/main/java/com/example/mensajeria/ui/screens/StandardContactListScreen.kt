@@ -289,11 +289,12 @@ fun StandardContactListScreen(
 
                             Spacer(modifier = Modifier.height(3.dp))
 
+                            val lastSeen = contact.getLastSeenDisplay()
                             Text(
-                                text = if (contact.isOnline) {
-                                    "● En línea"
-                                } else {
-                                    "Conectado última vez a la(s) ${contact.getLastSeenDisplay()}"
+                                text = when {
+                                    contact.isOnline -> "● En línea"
+                                    lastSeen.isNotBlank() -> "Conectado última vez a la(s) $lastSeen"
+                                    else -> "Desconectado"
                                 },
                                 color = if (contact.isOnline) whatsappGreen else TextSecondaryGray,
                                 fontSize = 12.sp,

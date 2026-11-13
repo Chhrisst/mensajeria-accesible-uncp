@@ -94,7 +94,7 @@ fun AccessibleChatScreen(
     }
     val isContactOnline = (if (uiState.contact.id == contact.id) uiState.contact.isOnline else contact.isOnline)
 
-    LaunchedEffect(contact) {
+    LaunchedEffect(contact.id) {
         chatViewModel.setContact(contact)
         chatViewModel.ttsService.speak(
             "Chat con ${contact.name}. $connectionStatus. Desliza para explorar mensajes o pulsa el botón inferior del asistente de voz."
