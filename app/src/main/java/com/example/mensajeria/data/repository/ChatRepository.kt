@@ -8,6 +8,7 @@ import com.example.mensajeria.data.api.ApiSendMessageRequest
 import com.example.mensajeria.data.api.RetrofitClient
 import com.example.mensajeria.data.model.Contact
 import com.example.mensajeria.data.model.Message
+import com.example.mensajeria.domain.service.E2EEncryptionManager
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.CancellationException
@@ -122,11 +123,17 @@ class ChatRepository(private val context: Context? = null) {
         val id = c.id?.takeIf { it.isNotBlank() } ?: return null
         val username = c.username ?: ""
         val name = c.name?.takeIf { it.isNotBlank() } ?: username.ifBlank { return null }
+        val rawLastMsg = c.lastMessage ?: ""
+        val decryptedDesc = if (rawLastMsg.isNotBlank()) {
+            E2EEncryptionManager.decrypt(rawLastMsg, currentActiveUserId, id)
+        } else {
+            c.visualCondition ?: ""
+        }
         return Contact(
             id = id,
             name = name,
             username = username,
-            description = c.lastMessage ?: c.visualCondition ?: "",
+            description = decryptedDesc,
             isOnline = c.isOnline ?: false
         )
     }
@@ -342,9 +349,10 @@ class ChatRepository(private val context: Context? = null) {
                 val mapped = apiMsgs.mapNotNull { m ->
                     val id = m?.id?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
                     val isFromMe = m.isFromMe || (m.senderId == userId)
+                    val clearContent = E2EEncryptionManager.decrypt(m.content ?: "", userId, contactId)
                     Message(
                         id = id,
-                        text = m.content ?: "",
+                        text = clearContent,
                         isOutgoing = isFromMe,
                         senderName = if (isFromMe) "Tú" else "Contacto",
                         isVoiceNote = (m.messageType == "AUDIO"),
@@ -392,10 +400,11 @@ class ChatRepository(private val context: Context? = null) {
         }
 
         return try {
+            val encryptedPayload = E2EEncryptionManager.encrypt(text, userId, contactId)
             val request = ApiSendMessageRequest(
                 senderId = userId,
                 receiverId = contactId,
-                content = text,
+                content = encryptedPayload,
                 messageType = if (isVoiceNote) "AUDIO" else "TEXT",
                 audioDurationSeconds = voiceDurationSeconds
             )

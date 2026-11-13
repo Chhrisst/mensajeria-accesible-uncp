@@ -7,6 +7,7 @@ import com.example.mensajeria.data.api.RetrofitClient
 import com.example.mensajeria.data.model.RegistrationForm
 import com.example.mensajeria.data.repository.AuthRepository
 import com.example.mensajeria.data.repository.ChatRepository
+import com.example.mensajeria.domain.service.E2EEncryptionManager
 import com.example.mensajeria.ui.viewmodel.AuthViewModel
 import com.google.gson.Gson
 import kotlinx.coroutines.runBlocking
@@ -139,10 +140,12 @@ class SecurityInputTest {
         assertTrue(chat.sendMessageRemote(userId, contactId, payload).isSuccess)
 
         val sent = api.sentMessages.single()
-        assertEquals(payload, sent.content)
+        // Con Cifrado de Extremo a Extremo (E2EE), el contenido viaja cifrado como payload opaco
+        assertTrue("El mensaje debe viajar cifrado con E2EE", E2EEncryptionManager.isEncrypted(sent.content))
+        val decrypted = E2EEncryptionManager.decrypt(sent.content, userId, contactId)
+        assertEquals(payload, decrypted)
         val json = Gson().toJson(sent)
-        assertTrue("Las comillas deben ir escapadas en el JSON", json.contains("\\\"; DROP"))
-        assertEquals(payload, Gson().fromJson(json, sent.javaClass).content)
+        assertEquals(sent.content, Gson().fromJson(json, sent.javaClass).content)
     }
 
     @Test
