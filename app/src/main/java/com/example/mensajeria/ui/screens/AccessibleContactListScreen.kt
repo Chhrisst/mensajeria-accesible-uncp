@@ -102,10 +102,11 @@ fun AccessibleContactListScreen(
         }
     }
 
-    fun confirmSelection() {
-        if (contacts.isNotEmpty()) {
-            val selected = contacts[focusedIndex]
-            authViewModel.triggerBothSidesSelection()
+    fun confirmSelection(contact: Contact? = null) {
+        val selected = contact ?: if (contacts.isNotEmpty()) contacts[focusedIndex.coerceIn(0, contacts.size - 1)] else null
+        if (selected != null) {
+            authViewModel.soundService.playButtonClickSound()
+            authViewModel.vibrationService.vibrateClick()
             authViewModel.soundService.playSuccessSound()
             authViewModel.ttsService.speak("Abriendo chat con ${selected.name}.")
             onSelectContact(selected)
@@ -117,51 +118,6 @@ fun AccessibleContactListScreen(
             .fillMaxSize()
             .background(PureBlack)
             .navigationBarsPadding()
-            .pointerInput(contacts) {
-                awaitPointerEventScope {
-                    var lastLeftTouch = 0L
-                    var lastRightTouch = 0L
-                    var lastConfirmTime = 0L
-
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val now = System.currentTimeMillis()
-                        val width = size.width
-                        val height = size.height
-
-                        val pressedPointers = event.changes.filter { it.pressed }
-                        // 1. Detección de pulsar ambos lados (2 dedos simultáneos)
-                        if (pressedPointers.size >= 2) {
-                            val hasLeft = pressedPointers.any { it.position.x < width * 0.45f }
-                            val hasRight = pressedPointers.any { it.position.x > width * 0.55f }
-                            if ((hasLeft && hasRight || pressedPointers.size >= 2) && now - lastConfirmTime > 1000L) {
-                                lastConfirmTime = now
-                                event.changes.forEach { it.consume() }
-                                confirmSelection()
-                            }
-                        } else if (pressedPointers.size == 1) {
-                            val change = pressedPointers[0]
-                            val x = change.position.x
-                            val y = change.position.y
-
-                            if (x < width * 0.40f) {
-                                lastLeftTouch = now
-                            } else if (x > width * 0.60f) {
-                                lastRightTouch = now
-                            }
-
-                            // Toque de ambos lados casi simultáneo (<500ms)
-                            if (abs(lastLeftTouch - lastRightTouch) < 500L && now - lastConfirmTime > 1000L) {
-                                lastConfirmTime = now
-                                lastLeftTouch = 0L
-                                lastRightTouch = 0L
-                                change.consume()
-                                confirmSelection()
-                            }
-                        }
-                    }
-                }
-            }
             .padding(16.dp)
     ) {
         Column(
@@ -281,13 +237,13 @@ fun AccessibleContactListScreen(
                                     label = fullExploreLabel,
                                     onHover = { focusContact(index) }
                                 )
-                                .clickable {
+                                .clickable(role = Role.Button) {
                                     focusContact(index)
-                                    confirmSelection()
+                                    confirmSelection(contact)
                                 }
                                 .semantics {
                                     this.role = Role.Button
-                                    this.contentDescription = fullExploreLabel
+                                    this.contentDescription = "$fullExploreLabel. Pulsa para abrir el chat."
                                 },
                             shape = RoundedCornerShape(18.dp),
                             colors = CardDefaults.cardColors(
