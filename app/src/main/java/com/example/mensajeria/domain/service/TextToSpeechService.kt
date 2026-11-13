@@ -90,30 +90,52 @@ class TextToSpeechService(
             return
         }
         try {
-            val localePe = Locale.forLanguageTag("es-PE")
-            val res = tts?.setLanguage(localePe)
-            if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
-                tts?.language = Locale.forLanguageTag("es-ES")
+            // Locales en español latinoamericano en orden de preferencia
+            val latinLocales = listOf(
+                Locale.forLanguageTag("es-PE"), // Perú (prioridad local)
+                Locale.forLanguageTag("es-419"), // América Latina (estándar internacional)
+                Locale.forLanguageTag("es-MX"), // México (máxima compatibilidad de voces latinas en Google TTS)
+                Locale.forLanguageTag("es-US"), // Español EE.UU. (voz latina estándar en Android Google TTS)
+                Locale.forLanguageTag("es-CO"), // Colombia
+                Locale.forLanguageTag("es-AR"), // Argentina
+                Locale.forLanguageTag("es-CL"), // Chile
+                Locale("es")                    // Español genérico
+            )
+
+            // Probar el primer locale latino compatible
+            var languageSet = false
+            for (locale in latinLocales) {
+                val res = tts?.setLanguage(locale)
+                if (res != TextToSpeech.LANG_MISSING_DATA && res != TextToSpeech.LANG_NOT_SUPPORTED) {
+                    languageSet = true
+                    Log.d(TAG, "Idioma TTS establecido a: ${locale.toLanguageTag()}")
+                    break
+                }
+            }
+            if (!languageSet) {
+                Log.w(TAG, "No se encontró paquete de voz específico para variantes latinas, usando default de español")
+                tts?.setLanguage(Locale("es"))
             }
 
             try {
-                // Elegir la voz en español de mayor calidad (sin filtrar voces neuronales por red)
+                // Seleccionar explícitamente la mejor voz latina disponible en el dispositivo
                 val spanishVoices = tts?.voices?.filter { v ->
-                    v.locale.language == "es"
+                    v.locale.language.equals("es", ignoreCase = true) ||
+                        v.name.startsWith("es-", ignoreCase = true) ||
+                        v.name.startsWith("es_", ignoreCase = true)
                 } ?: emptyList()
-                val highQualityVoice = spanishVoices
-                    .filter { it.quality >= android.speech.tts.Voice.QUALITY_HIGH }
-                    .maxWithOrNull(
-                        compareBy<android.speech.tts.Voice> {
-                            it.locale.country.equals("PE", ignoreCase = true) ||
-                                it.locale.country.equals("MX", ignoreCase = true) ||
-                                it.locale.country.equals("ES", ignoreCase = true)
-                        }.thenBy { it.quality }
-                    )
-                if (highQualityVoice != null) {
-                    tts?.voice = highQualityVoice
+
+                val bestVoice = spanishVoices.maxByOrNull { calculateVoiceScore(it) }
+                if (bestVoice != null && calculateVoiceScore(bestVoice) > 0) {
+                    tts?.voice = bestVoice
+                    tts?.language = bestVoice.locale
+                    Log.i(TAG, "Voz TTS latina asignada: ${bestVoice.name} (${bestVoice.locale}, score=${calculateVoiceScore(bestVoice)})")
+                } else {
+                    Log.w(TAG, "No se encontró voz latina de alta fidelidad, usando configuración por defecto")
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                Log.w(TAG, "Error seleccionando voz específica: ${e.message}")
+            }
 
             tts?.setPitch(1.0f)
             tts?.setSpeechRate(0.97f) // Ritmo fluido, cálido y natural que respeta signos de puntuación
@@ -263,6 +285,53 @@ class TextToSpeechService(
         } catch (_: Exception) {}
         tts = null
         isReady = false
+    }
+
+    /**
+     * Calcula una puntuación para priorizar acentos latinoamericanos (Perú, 419 neutro, México, EE.UU., etc.)
+     * y penalizar fuertemente las variantes peninsulares (España) para que nunca sean elegidas si hay alternativas latinas.
+     */
+    private fun calculateVoiceScore(voice: android.speech.tts.Voice): Int {
+        val country = voice.locale.country.uppercase()
+        val tag = voice.locale.toLanguageTag().lowercase()
+        val name = voice.name.lowercase()
+
+        // Si es de España (ES / es-es), penalizarlo fuertemente para evitar acento ibérico
+        val isSpain = country == "ES" ||
+            tag.startsWith("es-es") ||
+            tag.contains("-es-") ||
+            name.contains("es-es") ||
+            name.contains("es_es") ||
+            name.contains("spain")
+        if (isSpain) {
+            return -1000 + voice.quality
+        }
+
+        var score = when {
+            country == "PE" || tag.contains("es-pe") || name.contains("es-pe") || name.contains("es_pe") -> 600 // Perú
+            country == "419" || tag.contains("es-419") || name.contains("es-419") || name.contains("es_419") -> 550 // Español latino neutro
+            country == "MX" || tag.contains("es-mx") || name.contains("es-mx") || name.contains("es_mx") -> 500 // México
+            country == "US" || tag.contains("es-us") || name.contains("es-us") || name.contains("es_us") -> 450 // EE.UU. (voz latina por defecto de Google TTS)
+            country == "CO" || tag.contains("es-co") || name.contains("es-co") || name.contains("es_co") -> 400 // Colombia
+            country == "AR" || tag.contains("es-ar") || name.contains("es-ar") || name.contains("es_ar") -> 350 // Argentina
+            country == "CL" || tag.contains("es-cl") || name.contains("es-cl") || name.contains("es_cl") -> 300 // Chile
+            else -> 150
+        }
+
+        // Bonificación por calidad de la voz
+        score += when (voice.quality) {
+            android.speech.tts.Voice.QUALITY_VERY_HIGH -> 50
+            android.speech.tts.Voice.QUALITY_HIGH -> 30
+            android.speech.tts.Voice.QUALITY_NORMAL -> 15
+            else -> 0
+        }
+
+        // Priorizar voces locales/instaladas offline para respuesta inmediata y consistente sin lag de red
+        if (!voice.isNetworkConnectionRequired) {
+            score += 25
+        }
+
+        return score
     }
 
     private companion object {
