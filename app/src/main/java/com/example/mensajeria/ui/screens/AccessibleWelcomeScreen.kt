@@ -42,7 +42,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import com.example.mensajeria.ui.components.exploreTarget
 import com.example.mensajeria.ui.components.playAccessibleClickFeedback
-import com.example.mensajeria.ui.components.VoiceAssistantLogo
 import com.example.mensajeria.ui.theme.AccessibleYellow
 import com.example.mensajeria.ui.theme.DarkCardBackground
 import com.example.mensajeria.ui.theme.MensajeriaTheme
@@ -111,24 +110,17 @@ fun AccessibleWelcomeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            VoiceAssistantLogo(
-                size = 110.dp,
-                isPulsing = true
-            )
-
             Spacer(modifier = Modifier.height(14.dp))
 
             Text(
                 text = "Pantalla de Bienvenida",
-                fontSize = 22.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             // Dos grandes áreas táctiles: Izquierda (Login) y Derecha (Registro)
             Row(
