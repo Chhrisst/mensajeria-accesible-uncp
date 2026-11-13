@@ -214,12 +214,14 @@ class VoiceAssistantManager(
             val currentTimeText = formatCurrentDateTimeForVoice()
             val weatherText = fetchWeatherSummary()
 
-            // Atajo instantáneo y preciso para preguntas comunes y acciones directas/multi-turno
-            val localCommonReply = tryHandleCommonQuestionLocally(
+            // Prioridad absoluta: Primero resolver comandos de acción (enviar mensaje, llamar, agregar contacto)
+            // para evitar que mensajes con palabras como "hora" o "clima" se confundan con preguntas del reloj.
+            val localActionResult = tryHandleActionCommandLocally(cleanCommand)
+            val localCommonReply = localActionResult ?: tryHandleCommonQuestionLocally(
                 query = cleanCommand,
                 currentTimeText = currentTimeText,
                 weatherText = weatherText
-            ) ?: tryHandleActionCommandLocally(cleanCommand)
+            )
 
             val result = if (localCommonReply != null) {
                 localCommonReply
@@ -353,24 +355,48 @@ class VoiceAssistantManager(
         currentTimeText: String,
         weatherText: String
     ): VoiceCommandResult? {
-        val q = query.lowercase(Locale.getDefault())
+        val trimmed = query.trim()
+        val lower = trimmed.lowercase(Locale.getDefault())
             .replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
 
-        if (q.contains("que hora") || q.contains("la hora") || q.contains("que dia es") || q.contains("fecha de hoy")) {
+        // 1. Si la frase contiene verbos o estructuras de acción (enviar mensaje, llamar, agregar, etc.),
+        // NUNCA debe interceptarse como una consulta de reloj o clima.
+        val isActionLike = lower.startsWith("envia") || lower.startsWith("enviar") ||
+            lower.startsWith("manda") || lower.startsWith("mandar") ||
+            lower.startsWith("escribe") || lower.startsWith("escribir") ||
+            lower.startsWith("dile") || lower.startsWith("di a ") || lower.startsWith("di que ") ||
+            lower.startsWith("llama") || lower.startsWith("llamar") ||
+            lower.startsWith("agrega") || lower.startsWith("agregar") ||
+            lower.startsWith("anadir") || lower.startsWith("añadir") ||
+            lower.startsWith("graba") || lower.startsWith("grabar") ||
+            lower.contains("diciendo") || lower.contains("que diga")
+        if (isActionLike) return null
+
+        // 2. Preguntas estrictas y exclusivas sobre la hora del reloj o la fecha actual
+        val isClockQuery = Regex("(?i)^(?:dime\\s+)?(?:la\\s+hora(?:\\s+por\\s+favor)?|qu[eé]\\s+hora\\s+(?:es|tienes)(?:\\s+ahora)?|hora\\s+actual|cu[aá]l\\s+es\\s+la\\s+hora)\\??$").matches(trimmed) ||
+            Regex("(?i)^(?:dime\\s+)?(?:qu[eé]\\s+(?:d[ií]a|fecha)\\s+es(?:\\s+hoy)?|fecha\\s+de\\s+hoy|fecha\\s+actual)\\??$").matches(trimmed)
+
+        if (isClockQuery) {
             return VoiceCommandResult(
                 action = "GENERAL_REPLY",
                 spokenResponse = "Actualmente son $currentTimeText."
             )
         }
 
-        if (q.contains("cuantos grados") || q.contains("temperatura") || q.contains("clima") || q.contains("hace frio") || q.contains("hace calor")) {
+        // 3. Preguntas estrictas sobre el clima / temperatura
+        val isWeatherQuery = Regex("(?i)^(?:dime\\s+)?(?:el\\s+clima|la\\s+temperatura|cu[aá]ntos\\s+grados\\s+(?:hay|estamos|hace)|hace\\s+(?:fr[ií]o|calor)|c[oó]mo\\s+est[aá]\\s+el\\s+clima)(?:\\s+hoy)?\\??$").matches(trimmed)
+
+        if (isWeatherQuery) {
             return VoiceCommandResult(
                 action = "GENERAL_REPLY",
                 spokenResponse = weatherText
             )
         }
 
-        if (q.contains("nombre de usuario") || q.contains("mi usuario") || q.contains("como me llamo") || q.contains("quien soy") || q.contains("cual es mi cuenta")) {
+        // 4. Preguntas estrictas sobre identidad / usuario
+        val isUserQuery = Regex("(?i)^(?:dime\\s+)?(?:cu[aá]l\\s+es\\s+)?(?:mi\\s+(?:nombre\\s+de\\s+)?usuario|mi\\s+cuenta|c[oó]mo\\s+me\\s+llamo|qui[eé]n\\s+soy)\\??$").matches(trimmed)
+
+        if (isUserQuery) {
             val fullName = getCurrentUser().ifBlank { "Usuario" }
             val handle = getCurrentUsername().ifBlank { fullName.lowercase().replace(" ", "") }
             return VoiceCommandResult(
@@ -498,6 +524,33 @@ class VoiceAssistantManager(
             }
         }
 
+        // Envío con destinatario explícito (ej: "Envía un mensaje a Juan diciendo a qué hora nos encontramos")
+        val explicitSendPrefixes = listOf(
+            Regex("(?i)^env[ií]a(?:r)?\\s+(?:un\\s+)?mensaje\\s+a\\s+([^\\s]+(?:\\s+[^\\s]+)?)\\s+(?:que\\s+diga|diciendo)\\s+(.+)$"),
+            Regex("(?i)^env[ií]a(?:r)?\\s+(?:un\\s+)?mensaje\\s+a\\s+([^\\s]+(?:\\s+[^\\s]+)?)\\s*:\\s*(.+)$"),
+            Regex("(?i)^manda(?:r)?\\s+(?:un\\s+)?mensaje\\s+a\\s+([^\\s]+(?:\\s+[^\\s]+)?)\\s+(?:que\\s+diga|diciendo)\\s+(.+)$"),
+            Regex("(?i)^dile\\s+a\\s+([^\\s]+(?:\\s+[^\\s]+)?)\\s+(?:que\\s+diga|diciendo)\\s+(.+)$"),
+            Regex("(?i)^dile\\s+a\\s+([^\\s]+(?:\\s+[^\\s]+)?)\\s+(.+)$"),
+            Regex("(?i)^escribe(?:r)?\\s+a\\s+([^\\s]+(?:\\s+[^\\s]+)?)\\s+(?:que\\s+diga|diciendo)\\s+(.+)$")
+        )
+        for (regex in explicitSendPrefixes) {
+            val match = regex.matchEntire(trimmed)
+            if (match != null) {
+                val targetRaw = match.groupValues.getOrNull(1)?.trim().orEmpty()
+                val body = match.groupValues.getOrNull(2)?.trim().orEmpty()
+                if (targetRaw.isNotBlank() && body.isNotBlank() && !body.contains("nota de voz", ignoreCase = true)) {
+                    val resolvedTarget = findContact(targetRaw)?.name ?: targetRaw
+                    val polished = IntonationPunctuationPolisher.polish(body)
+                    return VoiceCommandResult(
+                        action = "SEND_MESSAGE",
+                        targetContact = resolvedTarget,
+                        messageText = polished,
+                        spokenResponse = "Mensaje enviado a $resolvedTarget: $polished"
+                    )
+                }
+            }
+        }
+
         // Envío directo de mensaje dentro del chat con prefijos comunes
         if (isInChat) {
             val chatSendPrefixes = listOf(
@@ -518,6 +571,21 @@ class VoiceAssistantManager(
                     )
                 }
             }
+        }
+
+        // Intención de enviar mensaje sin contenido todavía (diálogo multi-turno)
+        val isSendMessageWithoutBody = Regex("(?i)^(?:env[ií]a|enviar|manda|mandar|escribe|escribir)\\s+(?:un\\s+)?mensaje(?:\\s+a\\s+([^\\s]+(?:\\s+[^\\s]+)?))?$").matchEntire(trimmed)
+        if (isSendMessageWithoutBody != null) {
+            val target = isSendMessageWithoutBody.groupValues.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() } ?: activeChat?.name
+            pendingAction = "SEND_MESSAGE"
+            pendingTargetContact = target
+            val who = if (!target.isNullOrBlank()) " a $target" else ""
+            return VoiceCommandResult(
+                action = "SEND_MESSAGE",
+                targetContact = target,
+                messageText = null,
+                spokenResponse = "¿Qué mensaje deseas enviar$who?"
+            )
         }
 
         return null

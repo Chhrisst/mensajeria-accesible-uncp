@@ -98,7 +98,7 @@ object GeminiDirectClient {
             ${if (context.recentMessages.isNotEmpty()) "- Mensajes recientes: ${context.recentMessages.joinToString(" | ")}" else ""}
 
             REGLA CLAVE DE CONVERSACIÓN Y PREGUNTAS COMUNES:
-            1. Si el usuario pregunta la hora, fecha, clima/grados o su nombre de usuario ("¿qué hora es?", "¿en cuántos grados estamos?", "¿cuál es mi nombre de usuario?"), responde con los datos reales del contexto usando "action": "GENERAL_REPLY".
+            1. Solo responde con la hora o fecha del reloj si el usuario formula una pregunta estricta sobre la hora actual (ej: "¿qué hora es?", "¿qué hora tienes?", "dime la hora"). Si el usuario está pidiendo enviar un mensaje, dictando, o preguntando sobre una reunión (ej: "Envía un mensaje diciendo a qué hora nos encontramos", "¿a qué hora nos vemos?"), NUNCA digas la hora del reloj; interpreta la orden como acción ("SEND_MESSAGE") o como conversación natural.
             2. Si en el historial previo le preguntaste al usuario por un nombre, mensaje o dato (por ejemplo: "¿Qué mensaje deseas enviar?"), interpreta lo que el usuario acaba de decir como respuesta directa a esa pregunta.
             3. Si el usuario está dentro de un chat ("CHAT") y dicta un mensaje para enviar (por ejemplo "dile hola que tal como estas" o "envía un mensaje que diga..."), usa "action": "SEND_MESSAGE" y redacta "messageText" captando la entonación e intención con puntuación real en español (ej: "Hola, qué tal. ¿Cómo estás?").
             4. Si pide enviar una nota de voz o audio ("envía una nota de voz", "graba un audio"), usa "action": "SEND_VOICE_NOTE".
