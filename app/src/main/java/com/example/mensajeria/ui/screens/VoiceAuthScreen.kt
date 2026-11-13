@@ -454,8 +454,9 @@ fun VoiceSuccessScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
+            val handleDisplay = if (user.username.isNotBlank()) " (@${user.username})" else ""
             Text(
-                text = "Bienvenido ${user.name}",
+                text = "Bienvenido ${user.name}$handleDisplay",
                 fontSize = 19.sp,
                 color = Color.White,
                 fontWeight = FontWeight.SemiBold,

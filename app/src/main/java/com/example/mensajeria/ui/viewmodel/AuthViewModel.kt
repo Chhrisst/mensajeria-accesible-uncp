@@ -187,11 +187,12 @@ class AuthViewModel(
 
     private fun handleAccountDetected(found: UserProfile) {
         vibrationService.vibrateSuccess()
+        val handleDisplay = if (found.username.isNotBlank()) " (@${found.username})" else ""
         _voiceAuthState.update {
             it.copy(
                 phase = VoiceAuthPhase.ACCOUNT_DETECTED,
                 detectedUser = found,
-                feedbackMessage = "Cuenta detectada: ${found.name}."
+                feedbackMessage = "Cuenta detectada: ${found.name}$handleDisplay."
             )
         }
     }
@@ -268,14 +269,18 @@ class AuthViewModel(
         if (authRepository.verifyPin(user, pin)) {
             vibrationService.vibrateSuccess()
             authRepository.loginWithProfile(user)
+            val handlePart = if (user.username.isNotBlank()) ", usuario arroba ${user.username}" else ""
+            val handleDisplay = if (user.username.isNotBlank()) " (@${user.username})" else ""
             _voiceAuthState.update {
                 it.copy(
                     phase = VoiceAuthPhase.SUCCESS,
-                    feedbackMessage = "Acceso Exitoso. Bienvenido ${user.name}"
+                    feedbackMessage = "Acceso Exitoso. Bienvenido ${user.name}$handleDisplay"
                 )
             }
             _uiState.update { it.copy(authenticatedUser = user) }
-            ttsService.speak("Acceso exitoso. Bienvenido ${user.name}.")
+            if (isDisabilityMode) {
+                ttsService.speak("Acceso exitoso. Bienvenido ${user.name}$handlePart.")
+            }
         } else {
             triggerVoiceError("PIN incorrecto para la cuenta de ${user.name}.")
         }

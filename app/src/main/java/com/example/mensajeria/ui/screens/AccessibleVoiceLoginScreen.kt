@@ -149,9 +149,11 @@ fun AccessibleVoiceLoginScreen(
         if (voiceAuthState.detectedUser != null && detectedUser == null) {
             detectedUser = voiceAuthState.detectedUser
             isListeningName = false
-            feedbackText = "Cuenta detectada: ${detectedUser?.name}."
+            val handlePart = if (!detectedUser?.username.isNullOrBlank()) ", usuario arroba ${detectedUser?.username}" else ""
+            val handleDisplay = if (!detectedUser?.username.isNullOrBlank()) " (@${detectedUser?.username})" else ""
+            feedbackText = "Cuenta detectada: ${detectedUser?.name}$handleDisplay."
             authViewModel.ttsService.speak(
-                "Cuenta detectada: ${detectedUser?.name}. Pulsa de izquierda a derecha cuatro veces para ingresar tu contraseña."
+                "Cuenta detectada: ${detectedUser?.name}$handlePart. Pulsa de izquierda a derecha cuatro veces para ingresar tu contraseña."
             )
         }
     }
@@ -188,7 +190,8 @@ fun AccessibleVoiceLoginScreen(
             if (isValid) {
                 authViewModel.soundService.playSuccessSound()
                 authViewModel.vibrationService.vibrateSuccess()
-                authViewModel.ttsService.speak("Contraseña correcta. Acceso exitoso. Bienvenido ${detectedUser?.name}.")
+                val handlePart = if (!detectedUser?.username.isNullOrBlank()) ", usuario arroba ${detectedUser?.username}" else ""
+                authViewModel.ttsService.speak("Contraseña correcta. Acceso exitoso. Bienvenido ${detectedUser?.name}$handlePart.")
                 authViewModel.authRepository.loginWithProfile(detectedUser!!)
                 onLoginSuccess(detectedUser!!)
             } else {
@@ -298,8 +301,9 @@ fun AccessibleVoiceLoginScreen(
                         .weight(1f),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    val handleDisplay = if (!detectedUser?.username.isNullOrBlank()) " (@${detectedUser?.username})" else ""
                     Text(
-                        text = "Cuenta: ${detectedUser?.name}",
+                        text = "Cuenta: ${detectedUser?.name}$handleDisplay",
                         fontSize = 18.sp,
                         color = TextSecondaryGray
                     )
