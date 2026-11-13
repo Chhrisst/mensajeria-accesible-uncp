@@ -256,7 +256,7 @@ fun AccessibleContactListScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "Aún no tienes contactos.\nUsa el Asistente de Voz para agregar contactos por su usuario.",
+                                    text = "Aún no tienes contactos.\nUsa el Asistente de Voz para agregar contactos.",
                                     color = Color.White,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Medium,

@@ -31,16 +31,36 @@ class SoundNotificationService(private val context: Context) {
         }
     }
 
-    private var toneGenerator: ToneGenerator? = try {
-        ToneGenerator(AudioManager.STREAM_MUSIC, 65)
-    } catch (_: Exception) {
-        null
+    @Volatile
+    private var toneGenerator: ToneGenerator? = null
+
+    init {
+        initToneGenerator()
+    }
+
+    private fun initToneGenerator() {
+        try {
+            toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, 85)
+        } catch (_: Exception) {
+            try {
+                toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 85)
+            } catch (_: Exception) {
+                toneGenerator = null
+            }
+        }
+    }
+
+    private fun getToneGenerator(): ToneGenerator? {
+        if (toneGenerator == null) {
+            initToneGenerator()
+        }
+        return toneGenerator
     }
 
     /**
-     * Genera y reproduce una secuencia melódica de ondas sinusoidales suaves.
+     * Genera y reproduce una secuencia melódica de ondas sinusoidales suaves en el canal multimedia.
      */
-    private fun playHarmonicNotes(notes: List<Pair<Double, Int>>, gapMs: Int = 18, volume: Double = 0.28) {
+    private fun playHarmonicNotes(notes: List<Pair<Double, Int>>, gapMs: Int = 18, volume: Double = 0.75) {
         Thread {
             try {
                 val totalSamples = notes.sumOf { (_, ms) -> (SAMPLE_RATE * (ms + gapMs)) / 1000 }
@@ -74,8 +94,8 @@ class SoundNotificationService(private val context: Context) {
                 }
 
                 val attributes = AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                     .build()
 
                 val format = AudioFormat.Builder()
@@ -107,29 +127,45 @@ class SoundNotificationService(private val context: Context) {
      * Tono de confirmación auditiva sutil y agradable para cada botón pulsado.
      */
     fun playButtonClickSound() {
-        try {
-            playHarmonicNotes(listOf(660.0 to 35), gapMs = 0, volume = 0.20)
+        val played = try {
+            val tg = getToneGenerator()
+            if (tg != null) {
+                tg.startTone(ToneGenerator.TONE_PROP_BEEP, 35)
+                true
+            } else {
+                false
+            }
         } catch (_: Exception) {
-            try {
-                toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 35)
-            } catch (_: Exception) {}
+            false
+        }
+
+        if (!played) {
+            playHarmonicNotes(listOf(660.0 to 35), gapMs = 0, volume = 0.55)
         }
     }
 
     /**
-     * Tono agradable de doble nota ascendente cálida (Re5 -> La5) que indica hablar después del tono.
+     * Tono agradable que indica hablar después del tono (tono prompt de escucha).
      */
     fun playListeningPromptSound() {
-        try {
-            playHarmonicNotes(
-                notes = listOf(587.33 to 85, 880.0 to 105),
-                gapMs = 15,
-                volume = 0.30
-            )
+        val played = try {
+            val tg = getToneGenerator()
+            if (tg != null) {
+                tg.startTone(ToneGenerator.TONE_PROP_PROMPT, 140)
+                true
+            } else {
+                false
+            }
         } catch (_: Exception) {
-            try {
-                toneGenerator?.startTone(ToneGenerator.TONE_PROP_PROMPT, 120)
-            } catch (_: Exception) {}
+            false
+        }
+
+        if (!played) {
+            playHarmonicNotes(
+                notes = listOf(587.33 to 85, 880.0 to 110),
+                gapMs = 15,
+                volume = 0.85
+            )
         }
     }
 
@@ -138,7 +174,7 @@ class SoundNotificationService(private val context: Context) {
      */
     fun playLeftTapSound() {
         try {
-            playHarmonicNotes(listOf(440.0 to 60), gapMs = 0, volume = 0.22)
+            playHarmonicNotes(listOf(440.0 to 60), gapMs = 0, volume = 0.65)
         } catch (_: Exception) {}
     }
 
@@ -147,7 +183,7 @@ class SoundNotificationService(private val context: Context) {
      */
     fun playRightTapSound() {
         try {
-            playHarmonicNotes(listOf(554.37 to 60), gapMs = 0, volume = 0.22)
+            playHarmonicNotes(listOf(554.37 to 60), gapMs = 0, volume = 0.65)
         } catch (_: Exception) {}
     }
 
@@ -155,26 +191,50 @@ class SoundNotificationService(private val context: Context) {
      * Acorde mayor suave ascendente (Do5 -> Mi5 -> Sol5) para confirmación o acceso exitoso.
      */
     fun playSuccessSound() {
-        try {
+        val played = try {
+            val tg = getToneGenerator()
+            if (tg != null) {
+                tg.startTone(ToneGenerator.TONE_PROP_ACK, 160)
+                true
+            } else {
+                false
+            }
+        } catch (_: Exception) {
+            false
+        }
+
+        if (!played) {
             playHarmonicNotes(
                 notes = listOf(523.25 to 70, 659.25 to 70, 783.99 to 110),
                 gapMs = 12,
-                volume = 0.28
+                volume = 0.80
             )
-        } catch (_: Exception) {}
+        }
     }
 
     /**
      * Doble tono grave suave descendente para avisar un error sin estridencia.
      */
     fun playErrorSound() {
-        try {
+        val played = try {
+            val tg = getToneGenerator()
+            if (tg != null) {
+                tg.startTone(ToneGenerator.TONE_PROP_NACK, 200)
+                true
+            } else {
+                false
+            }
+        } catch (_: Exception) {
+            false
+        }
+
+        if (!played) {
             playHarmonicNotes(
                 notes = listOf(392.0 to 90, 311.13 to 130),
                 gapMs = 20,
-                volume = 0.26
+                volume = 0.80
             )
-        } catch (_: Exception) {}
+        }
     }
 
     /**
