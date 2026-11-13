@@ -34,14 +34,14 @@ class VibrationService(context: Context) {
      * Vibración táctil para confirmación al pulsar cualquier botón.
      */
     fun vibrateClick() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
-                vibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+                vibrator?.vibrate(VibrationEffect.createOneShot(45L, VibrationEffect.DEFAULT_AMPLITUDE))
             } catch (_: Exception) {
-                vibrate(35)
+                vibrate(45L)
             }
         } else {
-            vibrate(35)
+            vibrate(45L)
         }
     }
 
@@ -51,17 +51,17 @@ class VibrationService(context: Context) {
     }
 
     /**
-     * Vibración táctil distintiva al arrastrar el dedo y pasar sobre cualquier botón o el nombre de usuario.
+     * Vibración táctil distintiva al deslizar el dedo y pasar sobre cualquier botón o contenido.
      */
     fun vibrateHover() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
-                vibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
+                vibrator?.vibrate(VibrationEffect.createOneShot(30L, VibrationEffect.DEFAULT_AMPLITUDE))
             } catch (_: Exception) {
-                vibrate(35)
+                vibrate(30L)
             }
         } else {
-            vibrate(35)
+            vibrate(30L)
         }
     }
 

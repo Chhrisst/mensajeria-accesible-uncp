@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -92,12 +93,16 @@ fun AccessibleVoiceAssistantBar(
         AssistantMode.STANDBY -> "Asistente de Voz IA"
     }
 
+    val context = LocalContext.current
     Card(
         modifier = modifier
             .fillMaxWidth()
             .height(82.dp)
             .exploreTarget(id = "voice_assistant_bar", label = "Asistente de voz IA. Pulsa para enviar mensaje de texto, nota de voz o consultar.")
-            .clickable(onClick = onAssistantClick)
+            .clickable(role = Role.Button) {
+                playAccessibleClickFeedback(context)
+                onAssistantClick()
+            }
             .semantics {
                 this.role = Role.Button
                 this.contentDescription = "$statusTitle. ${state.feedbackMessage}. Pulsa para activar la voz."

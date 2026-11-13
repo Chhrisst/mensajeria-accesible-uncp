@@ -148,7 +148,10 @@ fun StandardChatScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onBackToContacts) {
+                    IconButton(onClick = {
+                        chatViewModel.vibrationService.vibrateClick()
+                        onBackToContacts()
+                    }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Volver",
@@ -194,6 +197,7 @@ fun StandardChatScreen(
 
                     IconButton(
                         onClick = {
+                            chatViewModel.vibrationService.vibrateClick()
                             requestAudioThen { chatViewModel.startVoiceCall() }
                         }
                     ) {
@@ -252,7 +256,10 @@ fun StandardChatScreen(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clickable { chatViewModel.togglePlayVoiceNote(message) }
+                                            .clickable {
+                                                chatViewModel.vibrationService.vibrateClick()
+                                                chatViewModel.togglePlayVoiceNote(message)
+                                            }
                                             .padding(vertical = 4.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
@@ -355,7 +362,10 @@ fun StandardChatScreen(
                         .padding(horizontal = 10.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { chatViewModel.cancelVoiceNoteRecording() }) {
+                    IconButton(onClick = {
+                        chatViewModel.vibrationService.vibrateClick()
+                        chatViewModel.cancelVoiceNoteRecording()
+                    }) {
                         Icon(
                             imageVector = Icons.Default.Delete,
                             contentDescription = "Cancelar nota de voz",
@@ -404,6 +414,7 @@ fun StandardChatScreen(
                             .clip(CircleShape)
                             .background(whatsappGreen)
                             .clickable(role = Role.Button) {
+                                chatViewModel.vibrationService.vibrateClick()
                                 chatViewModel.finishAndSendVoiceNoteRecording()
                             },
                         contentAlignment = Alignment.Center
@@ -451,6 +462,7 @@ fun StandardChatScreen(
                                 .clip(CircleShape)
                                 .background(whatsappGreen)
                                 .clickable(role = Role.Button) {
+                                    chatViewModel.vibrationService.vibrateClick()
                                     chatViewModel.sendTextMessage(inputText)
                                     inputText = ""
                                 },
@@ -474,6 +486,7 @@ fun StandardChatScreen(
                                     awaitEachGesture {
                                         val down = awaitFirstDown(requireUnconsumed = false)
                                         val pressStart = System.currentTimeMillis()
+                                        chatViewModel.vibrationService.vibrateClick()
                                         if (hasAudioPermission) {
                                             chatViewModel.startVoiceNoteRecording()
                                         } else {
@@ -486,6 +499,7 @@ fun StandardChatScreen(
                                         // Si mantuvo pulsado > 550ms y soltó, enviar automáticamente estilo WhatsApp;
                                         // si fue un toque rápido, dejar la barra de grabación abierta para hablar tranquilo y pulsar Enviar.
                                         if (up != null && heldMs > 550L) {
+                                            chatViewModel.vibrationService.vibrateClick()
                                             chatViewModel.finishAndSendVoiceNoteRecording()
                                         }
                                     }

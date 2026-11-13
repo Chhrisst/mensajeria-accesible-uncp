@@ -21,20 +21,24 @@ data class Message(
  * Modelo para contactos con los que interactúa el usuario.
  */
 data class Contact(
-    val id: String,
-    val name: String,
+    val id: String = "",
+    val name: String = "",
     val username: String = "",
     val description: String = "",
     val isOnline: Boolean = false,
     val lastSeenTime: String? = ""
 ) {
     fun getLastSeenDisplay(): String {
-        val raw = lastSeenTime?.trim().orEmpty()
+        val raw = try {
+            (lastSeenTime as CharSequence?)?.trim()?.toString().orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
         return if (Regex("^\\d{1,2}:\\d{2}$").matches(raw)) raw else ""
     }
 
     fun getConnectionStatusText(): String {
-        if (isOnline) return "En línea"
+        if (isOnline == true) return "En línea"
         val lastSeen = getLastSeenDisplay()
         return if (lastSeen.isNotBlank()) {
             "Conectado última vez a la(s) $lastSeen"

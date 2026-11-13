@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -65,6 +66,7 @@ fun VoiceCallOverlay(
     onToggleSpeaker: () -> Unit,
     onEndCall: () -> Unit
 ) {
+    val context = LocalContext.current
     val accent = if (isAccessibleMode) AccessibleYellow else Color(0xFF25D366)
     val bg = if (isAccessibleMode) PureBlack else Color(0xFF0B141A)
     val infinite = rememberInfiniteTransition(label = "call_pulse")
@@ -157,7 +159,10 @@ fun VoiceCallOverlay(
                                 )
                                 .clip(CircleShape)
                                 .background(accent)
-                                .clickable(role = Role.Button, onClick = onAcceptCall)
+                                .clickable(role = Role.Button) {
+                                    playAccessibleClickFeedback(context)
+                                    onAcceptCall()
+                                }
                                 .semantics {
                                     this.role = Role.Button
                                     this.contentDescription = "Contestar llamada de $contactName"
@@ -186,7 +191,10 @@ fun VoiceCallOverlay(
                                 )
                                 .clip(CircleShape)
                                 .background(Color(0xFFE53935))
-                                .clickable(role = Role.Button, onClick = onRejectCall)
+                                .clickable(role = Role.Button) {
+                                    playAccessibleClickFeedback(context)
+                                    onRejectCall()
+                                }
                                 .semantics {
                                     this.role = Role.Button
                                     this.contentDescription = "Rechazar llamada de $contactName"
@@ -220,7 +228,10 @@ fun VoiceCallOverlay(
                             .exploreTarget(id = "call_speaker", label = if (isSpeakerphoneOn) "Desactivar altavoz" else "Activar altavoz")
                             .clip(CircleShape)
                             .background(if (isSpeakerphoneOn) accent else DarkCardBackground)
-                            .clickable(role = Role.Button, onClick = onToggleSpeaker)
+                            .clickable(role = Role.Button) {
+                                playAccessibleClickFeedback(context)
+                                onToggleSpeaker()
+                            }
                             .semantics {
                                 this.role = Role.Button
                                 this.contentDescription = if (isSpeakerphoneOn) "Altavoz activado" else "Altavoz desactivado"
@@ -246,7 +257,10 @@ fun VoiceCallOverlay(
                             .exploreTarget(id = "call_hangup", label = "Colgar llamada")
                             .clip(CircleShape)
                             .background(Color(0xFFE53935))
-                            .clickable(role = Role.Button, onClick = onEndCall)
+                            .clickable(role = Role.Button) {
+                                playAccessibleClickFeedback(context)
+                                onEndCall()
+                            }
                             .semantics {
                                 this.role = Role.Button
                                 this.contentDescription = "Finalizar llamada"
@@ -272,7 +286,10 @@ fun VoiceCallOverlay(
                             .exploreTarget(id = "call_mute", label = if (isMuted) "Activar micrófono" else "Silenciar micrófono")
                             .clip(CircleShape)
                             .background(if (isMuted) accent else DarkCardBackground)
-                            .clickable(role = Role.Button, onClick = onToggleMute)
+                            .clickable(role = Role.Button) {
+                                playAccessibleClickFeedback(context)
+                                onToggleMute()
+                            }
                             .semantics {
                                 this.role = Role.Button
                                 this.contentDescription = if (isMuted) "Micrófono silenciado" else "Silenciar micrófono"

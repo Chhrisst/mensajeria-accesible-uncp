@@ -16,7 +16,9 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.example.mensajeria.domain.service.VibrationService
 
 data class ExploreTarget(
     val id: String,
@@ -130,6 +132,7 @@ fun AccessibleTouchExplorationHost(
     onExploreHover: (String) -> Unit,
     content: @Composable () -> Unit
 ) {
+    val context = LocalContext.current
     val registry = remember(screenKey) { TouchExploreRegistry() }
     val currentOnExploreHover = rememberUpdatedState(onExploreHover)
 
@@ -187,6 +190,9 @@ fun AccessibleTouchExplorationHost(
                                         if (hit != null) {
                                             if (hit.id != lastAnnouncedId) {
                                                 lastAnnouncedId = hit.id
+                                                try {
+                                                    VibrationService.getInstance(context).vibrateHover()
+                                                } catch (_: Exception) {}
                                                 hit.onHover?.invoke()
                                                 currentOnExploreHover.value(hit.label)
                                             }

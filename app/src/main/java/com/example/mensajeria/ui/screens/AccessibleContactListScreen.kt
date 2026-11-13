@@ -89,12 +89,15 @@ fun AccessibleContactListScreen(
 
     fun focusContact(index: Int) {
         val clamped = index.coerceIn(0, (contacts.size - 1).coerceAtLeast(0))
-        if (clamped != focusedIndex && clamped < contacts.size) {
+        if (clamped < contacts.size) {
+            val wasDifferent = (clamped != focusedIndex)
             focusedIndex = clamped
             authViewModel.triggerHoverVibration()
-            val contact = contacts[clamped]
-            val handlePart = if (contact.username.isNotBlank()) ", usuario arroba ${contact.username}" else ""
-            authViewModel.ttsService.speak("${contact.name}$handlePart, ${contact.getConnectionStatusText()}")
+            if (wasDifferent) {
+                val contact = contacts[clamped]
+                val handlePart = if (contact.username.isNotBlank()) ", usuario arroba ${contact.username}" else ""
+                authViewModel.ttsService.speak("${contact.name}$handlePart, ${contact.getConnectionStatusText()}")
+            }
         }
     }
 
@@ -273,7 +276,7 @@ fun AccessibleContactListScreen(
                                 .exploreTarget(
                                     id = "contact_${contact.id}_$index",
                                     label = fullExploreLabel,
-                                    onHover = { focusedIndex = index }
+                                    onHover = { focusContact(index) }
                                 )
                                 .clickable {
                                     focusContact(index)

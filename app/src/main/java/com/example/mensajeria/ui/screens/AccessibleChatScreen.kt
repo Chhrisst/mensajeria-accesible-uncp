@@ -47,6 +47,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -60,6 +61,7 @@ import com.example.mensajeria.ui.components.AccessibleVoiceAssistantBar
 import com.example.mensajeria.ui.components.MessageBubble
 import com.example.mensajeria.ui.components.VoiceCallOverlay
 import com.example.mensajeria.ui.components.exploreTarget
+import com.example.mensajeria.ui.components.playAccessibleClickFeedback
 import com.example.mensajeria.ui.theme.AccessibleYellow
 import com.example.mensajeria.ui.theme.DarkCardBackground
 import com.example.mensajeria.ui.theme.PureBlack
@@ -80,6 +82,7 @@ fun AccessibleChatScreen(
     onBackToContacts: () -> Unit
 ) {
     val uiState by chatViewModel.uiState.collectAsState()
+    val context = LocalContext.current
     val assistantState = voiceAssistantManager?.state?.collectAsState()?.value ?: VoiceAssistantState()
     var focusedMessageIndex by remember { mutableIntStateOf(-1) }
     val listState = rememberLazyListState()
@@ -108,6 +111,7 @@ fun AccessibleChatScreen(
         if (clamped != focusedMessageIndex || messages[clamped].isVoiceNote) {
             focusedMessageIndex = clamped
             chatViewModel.soundService.playButtonClickSound()
+            chatViewModel.vibrationService.vibrateHover()
             val msg = messages[clamped]
             if (msg.isVoiceNote) {
                 chatViewModel.togglePlayVoiceNote(msg)
@@ -187,7 +191,7 @@ fun AccessibleChatScreen(
                 ) {
                     AccessibleBackButton(
                         onClick = {
-                            chatViewModel.soundService.playButtonClickSound()
+                            playAccessibleClickFeedback(context)
                             chatViewModel.ttsService.speak("Saliendo de la conversación.")
                             onBackToContacts()
                         },
@@ -229,6 +233,7 @@ fun AccessibleChatScreen(
                             .background(DarkCardBackground)
                             .border(2.dp, AccessibleYellow, CircleShape)
                             .clickable(role = Role.Button) {
+                                playAccessibleClickFeedback(context)
                                 chatViewModel.startVoiceCall()
                             }
                             .semantics {
@@ -270,7 +275,7 @@ fun AccessibleChatScreen(
                                 .exploreTarget(
                                     id = "chat_msg_${message.id}_$actualIndex",
                                     label = exploreText,
-                                    onHover = { focusedMessageIndex = actualIndex }
+                                    onHover = { focusMessage(actualIndex) }
                                 )
                                 .clickable {
                                     focusMessage(actualIndex)
@@ -326,7 +331,10 @@ fun AccessibleChatScreen(
                                         .exploreTarget(id = "voice_rec_cancel", label = "Cancelar grabación")
                                         .clip(CircleShape)
                                         .background(PureBlack)
-                                        .clickable { chatViewModel.cancelVoiceNoteRecording() },
+                                        .clickable {
+                                            playAccessibleClickFeedback(context)
+                                            chatViewModel.cancelVoiceNoteRecording()
+                                        },
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(Icons.Default.Close, contentDescription = "Cancelar", tint = Color.White)
@@ -337,7 +345,10 @@ fun AccessibleChatScreen(
                                         .exploreTarget(id = "voice_rec_send", label = "Enviar nota de voz")
                                         .clip(CircleShape)
                                         .background(AccessibleYellow)
-                                        .clickable { chatViewModel.finishAndSendVoiceNoteRecording() },
+                                        .clickable {
+                                            playAccessibleClickFeedback(context)
+                                            chatViewModel.finishAndSendVoiceNoteRecording()
+                                        },
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(Icons.Default.Stop, contentDescription = "Enviar", tint = PureBlack)
@@ -381,7 +392,10 @@ fun AccessibleChatScreen(
                                         .weight(1f)
                                         .height(56.dp)
                                         .exploreTarget(id = "chat_confirm_cancel", label = "Cancelar")
-                                        .clickable(role = Role.Button) { chatViewModel.cancelPendingMessage() },
+                                        .clickable(role = Role.Button) {
+                                            playAccessibleClickFeedback(context)
+                                            chatViewModel.cancelPendingMessage()
+                                        },
                                     shape = RoundedCornerShape(14.dp),
                                     colors = CardDefaults.cardColors(containerColor = PureBlack),
                                     border = BorderStroke(2.dp, PureBlack)
@@ -402,7 +416,10 @@ fun AccessibleChatScreen(
                                         .weight(1f)
                                         .height(56.dp)
                                         .exploreTarget(id = "chat_confirm_send", label = "Enviar")
-                                        .clickable(role = Role.Button) { chatViewModel.confirmAndSendMessage() },
+                                        .clickable(role = Role.Button) {
+                                            playAccessibleClickFeedback(context)
+                                            chatViewModel.confirmAndSendMessage()
+                                        },
                                     shape = RoundedCornerShape(14.dp),
                                     colors = CardDefaults.cardColors(containerColor = PureBlack),
                                     border = BorderStroke(2.dp, PureBlack)

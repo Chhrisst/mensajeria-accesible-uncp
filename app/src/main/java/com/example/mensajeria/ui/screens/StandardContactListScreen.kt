@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.sp
 import com.example.mensajeria.data.model.Contact
 import com.example.mensajeria.data.model.UserProfile
 import com.example.mensajeria.data.repository.ChatRepository
+import com.example.mensajeria.domain.service.VibrationService
 import com.example.mensajeria.ui.theme.PureBlack
 import com.example.mensajeria.ui.theme.TextSecondaryGray
 import kotlinx.coroutines.launch
@@ -183,14 +184,20 @@ fun StandardContactListScreen(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { showAddDialog = true }) {
+                    IconButton(onClick = {
+                        VibrationService.getInstance(context).vibrateClick()
+                        showAddDialog = true
+                    }) {
                         Icon(
                             imageVector = Icons.Default.PersonAdd,
                             contentDescription = "Agregar contacto por username",
                             tint = whatsappGreen
                         )
                     }
-                    IconButton(onClick = onLogout) {
+                    IconButton(onClick = {
+                        VibrationService.getInstance(context).vibrateClick()
+                        onLogout()
+                    }) {
                         Icon(
                             imageVector = Icons.Default.ExitToApp,
                             contentDescription = "Cerrar sesión",
@@ -245,7 +252,10 @@ fun StandardContactListScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable(onClickLabel = "Abrir conversación", role = Role.Button) { onSelectContact(contact) }
+                            .clickable(onClickLabel = "Abrir conversación", role = Role.Button) {
+                                VibrationService.getInstance(context).vibrateClick()
+                                onSelectContact(contact)
+                            }
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {

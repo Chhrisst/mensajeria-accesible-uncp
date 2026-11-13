@@ -47,8 +47,8 @@ class ChatViewModel(
     private val smartReplyService: SmartReplyService = SmartReplyService()
 ) : ViewModel() {
 
-    private val speechService = SpeechService(context)
-    private val vibrationService = VibrationService.getInstance(context)
+    val speechService = SpeechService(context)
+    val vibrationService = VibrationService.getInstance(context)
     val soundService = com.example.mensajeria.domain.service.SoundNotificationService.getInstance(context)
     val audioService = com.example.mensajeria.domain.service.AudioRecorderPlayerService(context)
     val voiceCallService = VoiceCallService(context)
