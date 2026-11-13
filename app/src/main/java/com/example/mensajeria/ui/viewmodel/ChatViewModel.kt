@@ -11,19 +11,28 @@ import com.example.mensajeria.data.model.ChatUiState
 import com.example.mensajeria.data.model.Contact
 import com.example.mensajeria.data.model.VoiceState
 import com.example.mensajeria.data.repository.ChatRepository
+import com.example.mensajeria.domain.service.CallSignalParser
+import com.example.mensajeria.domain.service.CallSignalType
+import com.example.mensajeria.domain.service.DecryptedCallStreamItem
 import com.example.mensajeria.domain.service.SmartReplyService
 import com.example.mensajeria.domain.service.SpeechService
 import com.example.mensajeria.domain.service.TextToSpeechService
 import com.example.mensajeria.domain.service.VibrationService
+import com.example.mensajeria.domain.service.VoiceCallListener
+import com.example.mensajeria.domain.service.VoiceCallService
+import com.example.mensajeria.domain.service.VoiceCallSignal
 import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.Collections
+import java.util.UUID
 
 /**
  * ViewModel principal que orquesta la arquitectura MVVM con Unidirectional Data Flow (UDF).
@@ -42,17 +51,26 @@ class ChatViewModel(
     private val vibrationService = VibrationService.getInstance(context)
     val soundService = com.example.mensajeria.domain.service.SoundNotificationService.getInstance(context)
     val audioService = com.example.mensajeria.domain.service.AudioRecorderPlayerService(context)
+    val voiceCallService = VoiceCallService(context)
     var isDisabilityMode: Boolean = true
     var currentUserId: String = ""
+    var currentUserName: String = "Usuario"
     private var pollingJob: Job? = null
     private var messagesJob: Job? = null
     private var refineJob: Job? = null
     private var recordingTimerJob: Job? = null
     private var callTimerJob: Job? = null
+    private var incomingCallPollingJob: Job? = null
+    private var activeCallFallbackPollingJob: Job? = null
+
+    @Volatile private var isOutgoingCaller: Boolean = false
+    private val processedCallStreamIds = Collections.synchronizedSet(mutableSetOf<String>())
+    private val handledIncomingCallIds = Collections.synchronizedSet(mutableSetOf<String>())
 
     private companion object {
         const val TAG = "ChatViewModel"
         const val AI_TIMEOUT_MS = 12_000L
+        const val CALL_RING_TIMEOUT_MS = 35_000L
     }
 
     val ttsService = TextToSpeechService(context) {
@@ -63,6 +81,57 @@ class ChatViewModel(
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
     init {
+        voiceCallService.listener = object : VoiceCallListener {
+            override fun onIncomingInvite(callId: String, callerId: String, callerName: String) {
+                handleIncomingCallInvite(callId, callerId, callerName)
+            }
+
+            override fun onRemoteRinging(callId: String, fromUserId: String) {
+                if (_uiState.value.isInCall && _uiState.value.activeCallId == callId && !_uiState.value.isIncomingCall) {
+                    _uiState.update { it.copy(callStatusText = "Timbrando...") }
+                }
+            }
+
+            override fun onRemoteAccepted(callId: String, fromUserId: String) {
+                if (_uiState.value.isInCall && _uiState.value.activeCallId == callId && !_uiState.value.isIncomingCall && _uiState.value.callStatusText != "En llamada") {
+                    enterActiveConnectedCall()
+                }
+            }
+
+            override fun onRemoteRejected(callId: String, fromUserId: String) {
+                handleRemoteCallTerminated(callId, isRejected = true)
+            }
+
+            override fun onRemoteEnded(callId: String, fromUserId: String) {
+                handleRemoteCallTerminated(callId, isRejected = false)
+            }
+
+            override fun onRemoteAudioChunk(callId: String, fromUserId: String, audioBase64: String) {
+                if (_uiState.value.isInCall && _uiState.value.activeCallId == callId && !_uiState.value.isIncomingCall) {
+                    voiceCallService.playRemotePcmBase64(audioBase64)
+                }
+            }
+        }
+
+        repository.onCallStreamMessagesLoaded = { contactId, items ->
+            processCallStreamSignals(contactId, items)
+        }
+
+        repository.onCallSignalDetectedFromContact = { contact, rawContent ->
+            val parsed = CallSignalParser.parse(rawContent)
+            if (parsed != null &&
+                parsed.type == CallSignalType.INVITE &&
+                !_uiState.value.isInCall &&
+                parsed.callId !in handledIncomingCallIds &&
+                (System.currentTimeMillis() - parsed.timestampMs) in 0..90_000L
+            ) {
+                viewModelScope.launch {
+                    val signals = repository.fetchCallStreamSignals(currentUserId, contact.id)
+                    processCallStreamSignals(contact.id, signals)
+                }
+            }
+        }
+
         // Observar flujo de mensajes desde el repositorio
         viewModelScope.launch {
             repository.messages.collect { msgs ->
@@ -363,18 +432,169 @@ class ChatViewModel(
     }
 
     /**
-     * Inicia una llamada de voz en tiempo real mediante el servidor.
+     * Vincula la sesión activa del usuario para escuchar llamadas entrantes por WebSocket y respaldo HTTP.
+     */
+    fun bindUserSession(userId: String, userName: String) {
+        val cleanId = userId.trim()
+        val cleanName = userName.trim().ifBlank { "Usuario" }
+        if (cleanId.isBlank()) {
+            currentUserId = ""
+            currentUserName = "Usuario"
+            incomingCallPollingJob?.cancel()
+            incomingCallPollingJob = null
+            voiceCallService.disconnectWebSocket()
+            return
+        }
+        currentUserName = cleanName
+        if (currentUserId == cleanId && incomingCallPollingJob?.isActive == true) {
+            voiceCallService.connectWebSocket(cleanId)
+            return
+        }
+        currentUserId = cleanId
+        voiceCallService.connectWebSocket(cleanId)
+        startIncomingCallMonitor()
+    }
+
+    private fun startIncomingCallMonitor() {
+        incomingCallPollingJob?.cancel()
+        incomingCallPollingJob = viewModelScope.launch {
+            while (currentUserId.isNotBlank()) {
+                delay(2800L)
+                if (_uiState.value.isInCall) continue
+                // Sincroniza contactos para detectar señales CALL_STREAM entrantes incluso fuera de un chat
+                val activeContacts = repository.contacts.value
+                for (c in activeContacts.take(6)) {
+                    if (_uiState.value.isInCall) break
+                    val signals = repository.fetchCallStreamSignals(currentUserId, c.id)
+                    if (signals.isNotEmpty()) {
+                        processCallStreamSignals(c.id, signals)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun processCallStreamSignals(contactId: String, items: List<DecryptedCallStreamItem>) {
+        if (items.isEmpty() || currentUserId.isBlank()) return
+        val state = _uiState.value
+
+        // 1. Si no estamos en llamada, buscar una invitación entrante activa para este usuario
+        if (!state.isInCall) {
+            val invite = CallSignalParser.findPendingIncomingInvite(
+                items = items,
+                currentUserId = currentUserId
+            )
+            if (invite != null && invite.callId !in handledIncomingCallIds) {
+                val effectiveCallerId = invite.callerId.ifBlank { contactId }
+                val knownName = repository.contacts.value.find { it.id == effectiveCallerId }?.name
+                    ?: invite.callerName
+                handleIncomingCallInvite(invite.callId, effectiveCallerId, knownName)
+            }
+            return
+        }
+
+        // 2. Si estamos en llamada con este contacto, procesar ACCEPT / REJECT / END / AUDIO
+        val activeCallId = state.activeCallId
+        val partnerId = state.callPartner?.id ?: state.contact.id
+        if (activeCallId.isBlank() || (partnerId.isNotBlank() && partnerId != contactId)) return
+
+        if (CallSignalParser.isCallRejected(items, activeCallId)) {
+            handleRemoteCallTerminated(activeCallId, isRejected = true)
+            return
+        }
+        if (CallSignalParser.hasCallTerminated(items, activeCallId)) {
+            handleRemoteCallTerminated(activeCallId, isRejected = false)
+            return
+        }
+        if (!state.isIncomingCall && state.callStatusText != "En llamada" &&
+            CallSignalParser.isCallAccepted(items, activeCallId)
+        ) {
+            enterActiveConnectedCall()
+            return
+        }
+
+        // 3. Reproducir bloques de voz remotos recibidos por CALL_STREAM si la llamada está conectada
+        if (!state.isIncomingCall && state.callStatusText == "En llamada") {
+            for (item in items) {
+                if (item.isFromMe) continue
+                if (!processedCallStreamIds.add(item.id)) continue
+                val sig = CallSignalParser.parse(item.content) ?: continue
+                if (sig.callId == activeCallId && sig.type == CallSignalType.AUDIO && item.audioBase64.isNotBlank()) {
+                    voiceCallService.playRemotePcmBase64(item.audioBase64)
+                }
+            }
+        }
+    }
+
+    private fun sendCallSignal(
+        type: CallSignalType,
+        callId: String,
+        targetId: String,
+        audioBase64: String = "",
+        alsoSendHttpFallback: Boolean = true
+    ) {
+        if (currentUserId.isBlank() || targetId.isBlank() || callId.isBlank()) return
+        val wsType = when (type) {
+            CallSignalType.INVITE -> "CALL_INVITE"
+            CallSignalType.RINGING -> "CALL_RINGING"
+            CallSignalType.ACCEPT -> "CALL_ACCEPT"
+            CallSignalType.REJECT -> "CALL_REJECT"
+            CallSignalType.END -> "CALL_END"
+            CallSignalType.AUDIO -> "CALL_AUDIO"
+        }
+        voiceCallService.sendWebSocketSignal(
+            type = wsType,
+            callId = callId,
+            targetId = targetId,
+            callerId = currentUserId,
+            callerName = currentUserName,
+            audioBase64 = audioBase64.takeIf { it.isNotBlank() }
+        )
+
+        if (alsoSendHttpFallback) {
+            val encoded = CallSignalParser.encode(
+                VoiceCallSignal(
+                    type = type,
+                    callId = callId,
+                    callerId = currentUserId,
+                    callerName = currentUserName,
+                    timestampMs = System.currentTimeMillis()
+                )
+            )
+            viewModelScope.launch {
+                repository.sendMessageRemote(
+                    userId = currentUserId,
+                    contactId = targetId,
+                    text = encoded,
+                    audioBase64 = audioBase64,
+                    messageTypeOverride = "CALL_STREAM"
+                )
+            }
+        }
+    }
+
+    /**
+     * Inicia una llamada de voz bidireccional en tiempo real mediante el servidor.
      */
     fun startVoiceCall() {
         val contact = _uiState.value.contact
-        if (_uiState.value.isInCall) return
+        if (_uiState.value.isInCall || contact.id.isBlank()) return
+
         audioService.stopPlayback()
+        speechService.stopListening()
         soundService.playCallRingbackTone()
         vibrationService.vibrateClick()
+
+        val callId = UUID.randomUUID().toString()
+        isOutgoingCaller = true
+        processedCallStreamIds.clear()
 
         _uiState.update {
             it.copy(
                 isInCall = true,
+                isIncomingCall = false,
+                activeCallId = callId,
+                callPartner = contact,
                 callStatusText = "Llamando a ${contact.name}...",
                 callDurationSeconds = 0,
                 isCallMuted = false,
@@ -385,38 +605,259 @@ class ChatViewModel(
             ttsService.speak("Llamando a ${contact.name}.")
         }
 
+        sendCallSignal(
+            type = CallSignalType.INVITE,
+            callId = callId,
+            targetId = contact.id,
+            alsoSendHttpFallback = true
+        )
+
         callTimerJob?.cancel()
         callTimerJob = viewModelScope.launch {
-            // Señalización inicial hacia el servidor
-            if (currentUserId.isNotBlank() && contact.id.isNotBlank()) {
-                repository.sendMessageRemote(
-                    userId = currentUserId,
-                    contactId = contact.id,
-                    text = "CALL_INVITE:${System.currentTimeMillis()}",
-                    messageTypeOverride = "CALL_STREAM"
+            val startMs = System.currentTimeMillis()
+            var lastRingtoneMs = startMs
+            while (_uiState.value.isInCall &&
+                _uiState.value.activeCallId == callId &&
+                _uiState.value.callStatusText != "En llamada"
+            ) {
+                delay(800L)
+                if (!_uiState.value.isInCall || _uiState.value.activeCallId != callId) return@launch
+                val nowMs = System.currentTimeMillis()
+                if (nowMs - lastRingtoneMs >= 2600L) {
+                    soundService.playCallRingbackTone()
+                    lastRingtoneMs = nowMs
+                }
+                val signals = repository.fetchCallStreamSignals(currentUserId, contact.id)
+                processCallStreamSignals(contact.id, signals)
+
+                if (nowMs - startMs >= CALL_RING_TIMEOUT_MS && _uiState.value.callStatusText != "En llamada") {
+                    if (isDisabilityMode) {
+                        ttsService.speak("${contact.name} no contestó la llamada.")
+                    }
+                    endVoiceCall()
+                    return@launch
+                }
+            }
+        }
+    }
+
+    private fun handleIncomingCallInvite(callId: String, callerId: String, callerName: String) {
+        if (callId.isBlank() || _uiState.value.isInCall) return
+        if (!handledIncomingCallIds.add(callId)) return
+
+        audioService.stopPlayback()
+        speechService.stopListening()
+        isOutgoingCaller = false
+        processedCallStreamIds.clear()
+
+        val partner = repository.contacts.value.find { it.id == callerId }
+            ?: Contact(id = callerId, name = callerName.ifBlank { "Contacto" }, username = "")
+
+        _uiState.update {
+            it.copy(
+                isInCall = true,
+                isIncomingCall = true,
+                activeCallId = callId,
+                callPartner = partner,
+                callStatusText = "Llamada entrante...",
+                callDurationSeconds = 0,
+                isCallMuted = false,
+                isSpeakerphoneOn = true
+            )
+        }
+
+        sendCallSignal(
+            type = CallSignalType.RINGING,
+            callId = callId,
+            targetId = partner.id,
+            alsoSendHttpFallback = false
+        )
+
+        if (isDisabilityMode) {
+            ttsService.speak("Llamada entrante de ${partner.name}. Toca a la izquierda para contestar o a la derecha para rechazar.")
+        }
+
+        callTimerJob?.cancel()
+        callTimerJob = viewModelScope.launch {
+            val startMs = System.currentTimeMillis()
+            while (_uiState.value.isInCall &&
+                _uiState.value.isIncomingCall &&
+                _uiState.value.activeCallId == callId
+            ) {
+                soundService.playIncomingCallRingtone()
+                vibrationService.vibrateStartListening()
+                delay(1800L)
+                if (!_uiState.value.isInCall || !_uiState.value.isIncomingCall) return@launch
+                val signals = repository.fetchCallStreamSignals(currentUserId, partner.id)
+                processCallStreamSignals(partner.id, signals)
+                if (System.currentTimeMillis() - startMs >= CALL_RING_TIMEOUT_MS) {
+                    rejectIncomingCall()
+                    return@launch
+                }
+            }
+        }
+    }
+
+    fun acceptIncomingCall() {
+        val state = _uiState.value
+        if (!state.isInCall || !state.isIncomingCall) return
+        val partnerId = state.callPartner?.id ?: state.contact.id
+        val callId = state.activeCallId
+
+        soundService.playButtonClickSound()
+        vibrationService.vibrateSuccess()
+
+        sendCallSignal(
+            type = CallSignalType.ACCEPT,
+            callId = callId,
+            targetId = partnerId,
+            alsoSendHttpFallback = true
+        )
+        enterActiveConnectedCall()
+    }
+
+    fun rejectIncomingCall() {
+        val state = _uiState.value
+        if (!state.isInCall) return
+        val partnerId = state.callPartner?.id ?: state.contact.id
+        val callId = state.activeCallId
+
+        callTimerJob?.cancel()
+        activeCallFallbackPollingJob?.cancel()
+        voiceCallService.stopAudioStreaming()
+        soundService.playButtonClickSound()
+        vibrationService.vibrateClick()
+
+        sendCallSignal(
+            type = CallSignalType.REJECT,
+            callId = callId,
+            targetId = partnerId,
+            alsoSendHttpFallback = true
+        )
+
+        _uiState.update {
+            it.copy(
+                isInCall = false,
+                isIncomingCall = false,
+                activeCallId = "",
+                callPartner = null,
+                callStatusText = "",
+                callDurationSeconds = 0
+            )
+        }
+        if (isDisabilityMode) {
+            ttsService.speak("Llamada rechazada.")
+        }
+    }
+
+    private fun enterActiveConnectedCall() {
+        val state = _uiState.value
+        val partner = state.callPartner ?: state.contact
+        val callId = state.activeCallId
+
+        callTimerJob?.cancel()
+        activeCallFallbackPollingJob?.cancel()
+        soundService.playSuccessSound()
+
+        _uiState.update {
+            it.copy(
+                isInCall = true,
+                isIncomingCall = false,
+                callStatusText = "En llamada",
+                callDurationSeconds = 0
+            )
+        }
+
+        if (isDisabilityMode) {
+            ttsService.speak("Llamada conectada con ${partner.name}.")
+        }
+
+        voiceCallService.setMuted(_uiState.value.isCallMuted)
+        voiceCallService.startAudioStreaming(
+            callId = callId,
+            targetId = partner.id,
+            callerId = currentUserId,
+            callerName = currentUserName,
+            speakerphoneOn = _uiState.value.isSpeakerphoneOn,
+            onSendFallbackChunk = { b64Audio ->
+                sendCallSignal(
+                    type = CallSignalType.AUDIO,
+                    callId = callId,
+                    targetId = partner.id,
+                    audioBase64 = b64Audio,
+                    alsoSendHttpFallback = true
                 )
             }
-            kotlinx.coroutines.delay(1400L)
-            if (!_uiState.value.isInCall) return@launch
-            soundService.playCallRingbackTone()
-            kotlinx.coroutines.delay(1400L)
-            if (!_uiState.value.isInCall) return@launch
+        )
 
-            soundService.playSuccessSound()
-            _uiState.update { it.copy(callStatusText = "En llamada") }
-            if (isDisabilityMode) {
-                ttsService.speak("Llamada conectada con ${contact.name}.")
-            }
-            while (_uiState.value.isInCall) {
-                kotlinx.coroutines.delay(1000L)
+        callTimerJob = viewModelScope.launch {
+            while (_uiState.value.isInCall && _uiState.value.activeCallId == callId) {
+                delay(1000L)
                 _uiState.update { it.copy(callDurationSeconds = it.callDurationSeconds + 1) }
             }
+        }
+
+        activeCallFallbackPollingJob = viewModelScope.launch {
+            while (_uiState.value.isInCall &&
+                !_uiState.value.isIncomingCall &&
+                _uiState.value.activeCallId == callId
+            ) {
+                val interval = if (voiceCallService.isWebSocketConnected()) 2000L else 550L
+                delay(interval)
+                if (!_uiState.value.isInCall || _uiState.value.activeCallId != callId) break
+                val signals = repository.fetchCallStreamSignals(currentUserId, partner.id)
+                processCallStreamSignals(partner.id, signals)
+            }
+        }
+    }
+
+    private fun handleRemoteCallTerminated(callId: String, isRejected: Boolean) {
+        val state = _uiState.value
+        if (!state.isInCall || state.activeCallId != callId) return
+
+        val partner = state.callPartner ?: state.contact
+        val duration = state.callDurationSeconds
+        val wasOutgoing = isOutgoingCaller
+        isOutgoingCaller = false
+
+        callTimerJob?.cancel()
+        activeCallFallbackPollingJob?.cancel()
+        voiceCallService.stopAudioStreaming()
+        soundService.playButtonClickSound()
+        vibrationService.vibrateClick()
+
+        _uiState.update {
+            it.copy(
+                isInCall = false,
+                isIncomingCall = false,
+                activeCallId = "",
+                callPartner = null,
+                callStatusText = "",
+                callDurationSeconds = 0
+            )
+        }
+
+        if (wasOutgoing && duration > 0 && partner.id.isNotBlank()) {
+            val summary = String.format(java.util.Locale.getDefault(), "Llamada de voz (%02d:%02d)", duration / 60, duration % 60)
+            if (partner.id == _uiState.value.contact.id) {
+                sendAndAnnounce(text = summary, successSpeech = "Llamada finalizada.", alwaysSpeak = false)
+            } else {
+                viewModelScope.launch {
+                    repository.sendMessageRemote(currentUserId, partner.id, summary)
+                }
+            }
+        }
+
+        if (isDisabilityMode) {
+            val msg = if (isRejected) "Llamada rechazada por ${partner.name}." else "Llamada finalizada."
+            ttsService.speak(msg)
         }
     }
 
     fun toggleCallMute() {
         val next = !_uiState.value.isCallMuted
         _uiState.update { it.copy(isCallMuted = next) }
+        voiceCallService.setMuted(next)
         if (isDisabilityMode) {
             ttsService.speak(if (next) "Micrófono silenciado." else "Micrófono activado.")
         }
@@ -425,33 +866,72 @@ class ChatViewModel(
     fun toggleSpeakerphone() {
         val next = !_uiState.value.isSpeakerphoneOn
         _uiState.update { it.copy(isSpeakerphoneOn = next) }
+        voiceCallService.setSpeakerphone(next)
         if (isDisabilityMode) {
             ttsService.speak(if (next) "Altavoz activado." else "Altavoz desactivado.")
         }
     }
 
     fun endVoiceCall() {
-        if (!_uiState.value.isInCall) return
+        val state = _uiState.value
+        if (!state.isInCall) return
+        if (state.isIncomingCall) {
+            rejectIncomingCall()
+            return
+        }
+
+        val partner = state.callPartner ?: state.contact
+        val callId = state.activeCallId
+        val duration = state.callDurationSeconds
+        val wasOutgoing = isOutgoingCaller
+        isOutgoingCaller = false
+
         callTimerJob?.cancel()
-        val duration = _uiState.value.callDurationSeconds
+        activeCallFallbackPollingJob?.cancel()
+        voiceCallService.stopAudioStreaming()
         soundService.playButtonClickSound()
         vibrationService.vibrateClick()
 
-        _uiState.update {
-            it.copy(isInCall = false, callStatusText = "", callDurationSeconds = 0)
-        }
-        val mins = duration / 60
-        val secs = duration % 60
-        val summary = if (duration > 0) {
-            String.format(java.util.Locale.getDefault(), "Llamada de voz (%02d:%02d)", mins, secs)
-        } else {
-            "Llamada de voz cancelada"
-        }
-        sendAndAnnounce(
-            text = summary,
-            successSpeech = "Llamada finalizada.",
-            alwaysSpeak = false
+        sendCallSignal(
+            type = CallSignalType.END,
+            callId = callId,
+            targetId = partner.id,
+            alsoSendHttpFallback = true
         )
+
+        _uiState.update {
+            it.copy(
+                isInCall = false,
+                isIncomingCall = false,
+                activeCallId = "",
+                callPartner = null,
+                callStatusText = "",
+                callDurationSeconds = 0
+            )
+        }
+
+        if (wasOutgoing && partner.id.isNotBlank()) {
+            val mins = duration / 60
+            val secs = duration % 60
+            val summary = if (duration > 0) {
+                String.format(java.util.Locale.getDefault(), "Llamada de voz (%02d:%02d)", mins, secs)
+            } else {
+                "Llamada de voz cancelada"
+            }
+            if (partner.id == _uiState.value.contact.id) {
+                sendAndAnnounce(
+                    text = summary,
+                    successSpeech = "Llamada finalizada.",
+                    alwaysSpeak = false
+                )
+            } else {
+                viewModelScope.launch {
+                    repository.sendMessageRemote(currentUserId, partner.id, summary)
+                }
+            }
+        } else if (isDisabilityMode) {
+            ttsService.speak("Llamada finalizada.")
+        }
     }
 
     /**
@@ -585,6 +1065,9 @@ class ChatViewModel(
         stopPolling()
         recordingTimerJob?.cancel()
         callTimerJob?.cancel()
+        incomingCallPollingJob?.cancel()
+        activeCallFallbackPollingJob?.cancel()
+        voiceCallService.release()
         audioService.release()
         speechService.destroy()
         ttsService.shutdown()

@@ -447,12 +447,15 @@ fun AccessibleChatScreen(
 
         if (uiState.isInCall) {
             VoiceCallOverlay(
-                contactName = contact.name,
+                contactName = uiState.callPartner?.name?.ifBlank { contact.name } ?: contact.name,
                 statusText = uiState.callStatusText,
                 durationSeconds = uiState.callDurationSeconds,
                 isMuted = uiState.isCallMuted,
                 isSpeakerphoneOn = uiState.isSpeakerphoneOn,
                 isAccessibleMode = true,
+                isIncomingRinging = uiState.isIncomingCall,
+                onAcceptCall = { chatViewModel.acceptIncomingCall() },
+                onRejectCall = { chatViewModel.rejectIncomingCall() },
                 onToggleMute = { chatViewModel.toggleCallMute() },
                 onToggleSpeaker = { chatViewModel.toggleSpeakerphone() },
                 onEndCall = { chatViewModel.endVoiceCall() }

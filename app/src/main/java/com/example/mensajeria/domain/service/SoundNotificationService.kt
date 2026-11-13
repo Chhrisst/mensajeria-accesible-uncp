@@ -229,6 +229,21 @@ class SoundNotificationService(private val context: Context) {
     }
 
     /**
+     * Reproduce un acorde melódico cálido para anunciar una llamada de voz entrante.
+     */
+    fun playIncomingCallRingtone() {
+        try {
+            playHarmonicNotes(
+                notes = listOf(523.25 to 120, 659.25 to 120, 783.99 to 150, 659.25 to 160),
+                gapMs = 25,
+                volume = 0.34
+            )
+        } catch (_: Exception) {
+            playCallRingbackTone()
+        }
+    }
+
+    /**
      * Reproduce un sonido agradable cuando se recibe un mensaje nuevo.
      */
     fun playMessageReceivedSound() {

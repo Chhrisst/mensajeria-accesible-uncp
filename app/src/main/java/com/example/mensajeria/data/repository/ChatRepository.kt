@@ -8,6 +8,8 @@ import com.example.mensajeria.data.api.ApiSendMessageRequest
 import com.example.mensajeria.data.api.RetrofitClient
 import com.example.mensajeria.data.model.Contact
 import com.example.mensajeria.data.model.Message
+import com.example.mensajeria.domain.service.CallSignalParser
+import com.example.mensajeria.domain.service.DecryptedCallStreamItem
 import com.example.mensajeria.domain.service.E2EEncryptionManager
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -47,6 +49,9 @@ class ChatRepository(private val context: Context? = null) {
 
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages: StateFlow<List<Message>> = _messages.asStateFlow()
+
+    @Volatile var onCallStreamMessagesLoaded: ((contactId: String, signals: List<DecryptedCallStreamItem>) -> Unit)? = null
+    @Volatile var onCallSignalDetectedFromContact: ((Contact, String) -> Unit)? = null
 
     init {
         if (context != null) {
@@ -130,22 +135,28 @@ class ChatRepository(private val context: Context? = null) {
         val username = c.username ?: ""
         val name = c.name?.takeIf { it.isNotBlank() } ?: username.ifBlank { return null }
         val rawLastMsg = c.lastMessage ?: ""
-        val decryptedDesc = if (rawLastMsg.isNotBlank()) {
+        val rawDecrypted = if (rawLastMsg.isNotBlank()) {
             E2EEncryptionManager.decrypt(rawLastMsg, currentActiveUserId, id)
         } else {
             c.visualCondition ?: ""
         }
+        val isCallSignal = CallSignalParser.isCallControlContent(rawDecrypted)
+        val displayDesc = if (isCallSignal) "📞 Llamada de voz" else rawDecrypted
         val convertedTime = formatServerTimeToLocal(c.lastMessageTime ?: "")
         // Determinar estado de conexión: en línea si el servidor lo reporta o si hay actividad reciente
         val isOnlineNow = (c.isOnline == true) || isTimeWithinMinutes(convertedTime, 5)
-        return Contact(
+        val contactObj = Contact(
             id = id,
             name = name,
             username = username,
-            description = decryptedDesc,
+            description = displayDesc,
             isOnline = isOnlineNow,
             lastSeenTime = convertedTime
         )
+        if (isCallSignal) {
+            onCallSignalDetectedFromContact?.invoke(contactObj, rawDecrypted)
+        }
+        return contactObj
     }
 
     /**
@@ -414,14 +425,28 @@ class ChatRepository(private val context: Context? = null) {
             // Si mientras esperábamos la red el usuario abrió otra conversación, descartar esta respuesta
             if (conversationKey != currentConversationKey) return _messages.value
             if (response.isSuccessful && apiMsgs != null) {
+                val callStreamItems = mutableListOf<DecryptedCallStreamItem>()
                 val mapped = apiMsgs.mapNotNull { m ->
                     val id = m?.id?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                    if (m.messageType == "CALL_STREAM") return@mapNotNull null
                     val isFromMe = m.isFromMe || (m.senderId == userId)
                     val clearContent = E2EEncryptionManager.decrypt(m.content ?: "", userId, contactId)
                     val clearAudio = if (!m.audioUrl.isNullOrBlank()) {
                         E2EEncryptionManager.decrypt(m.audioUrl, userId, contactId)
                     } else ""
+                    if (m.messageType == "CALL_STREAM") {
+                        callStreamItems.add(
+                            DecryptedCallStreamItem(
+                                id = id,
+                                senderId = m.senderId ?: "",
+                                receiverId = m.receiverId ?: "",
+                                isFromMe = isFromMe,
+                                content = clearContent,
+                                audioBase64 = clearAudio,
+                                createdAt = m.createdAt ?: ""
+                            )
+                        )
+                        return@mapNotNull null
+                    }
                     Message(
                         id = id,
                         text = clearContent,
@@ -432,6 +457,9 @@ class ChatRepository(private val context: Context? = null) {
                         audioBase64 = clearAudio,
                         formattedTime = formatServerTimeToLocal(m.createdAt ?: "")
                     )
+                }
+                if (callStreamItems.isNotEmpty()) {
+                    onCallStreamMessagesLoaded?.invoke(contactId, callStreamItems)
                 }
                 // Actualizar hora de última conexión del contacto según su último mensaje recibido
                 val lastIncoming = mapped.lastOrNull { !it.isOutgoing }
@@ -462,6 +490,40 @@ class ChatRepository(private val context: Context? = null) {
         } catch (e: Exception) {
             Log.w(TAG, "Sin conexión al cargar mensajes: ${e.message}")
             _messages.value
+        }
+    }
+
+    /**
+     * Consulta los paquetes CALL_STREAM de un contacto sin alterar la conversación activa en _messages.
+     */
+    suspend fun fetchCallStreamSignals(userId: String, contactId: String): List<DecryptedCallStreamItem> {
+        if (userId.isBlank() || contactId.isBlank()) return emptyList()
+        return try {
+            val response = RetrofitClient.api.getMessages(userId, contactId)
+            val apiMsgs = response.body() ?: return emptyList()
+            if (!response.isSuccessful) return emptyList()
+            apiMsgs.mapNotNull { m ->
+                val id = m?.id?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                if (m.messageType != "CALL_STREAM") return@mapNotNull null
+                val isFromMe = m.isFromMe || (m.senderId == userId)
+                val clearContent = E2EEncryptionManager.decrypt(m.content ?: "", userId, contactId)
+                val clearAudio = if (!m.audioUrl.isNullOrBlank()) {
+                    E2EEncryptionManager.decrypt(m.audioUrl, userId, contactId)
+                } else ""
+                DecryptedCallStreamItem(
+                    id = id,
+                    senderId = m.senderId ?: "",
+                    receiverId = m.receiverId ?: "",
+                    isFromMe = isFromMe,
+                    content = clearContent,
+                    audioBase64 = clearAudio,
+                    createdAt = m.createdAt ?: ""
+                )
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 

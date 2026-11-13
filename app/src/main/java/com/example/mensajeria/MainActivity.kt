@@ -23,6 +23,7 @@ import com.example.mensajeria.data.model.UserProfile
 import com.example.mensajeria.data.repository.AuthRepository
 import com.example.mensajeria.data.repository.ChatRepository
 import com.example.mensajeria.ui.components.AccessibleTouchExplorationHost
+import com.example.mensajeria.ui.components.VoiceCallOverlay
 import com.google.gson.Gson
 import com.example.mensajeria.ui.screens.AccessibilityModeSelectionScreen
 import com.example.mensajeria.ui.screens.AccessibleChatScreen
@@ -169,6 +170,7 @@ fun MensajeriaApp(
     val gson = remember { Gson() }
 
     val authState by authViewModel.uiState.collectAsState()
+    val chatUiState by chatViewModel.uiState.collectAsState()
     val savedSessionUser = authState.authenticatedUser ?: authViewModel.authRepository.currentUser.collectAsState().value
 
     var isDisabilityMode by remember {
@@ -213,6 +215,7 @@ fun MensajeriaApp(
         navPrefs.edit().putBoolean("is_disability_mode", isDisabilityMode).apply()
         if (currentUser.id.isNotBlank()) {
             chatViewModel.isDisabilityMode = currentUser.hasDisability
+            chatViewModel.bindUserSession(currentUser.id, currentUser.name)
             if (currentScreen == AppFlowScreen.ACCESSIBLE_CONTACTS ||
                 currentScreen == AppFlowScreen.ACCESSIBLE_CHAT ||
                 currentScreen == AppFlowScreen.STANDARD_CONTACTS ||
@@ -227,6 +230,7 @@ fun MensajeriaApp(
                 chatViewModel.setContact(selectedContact, currentUser.id)
             }
         } else {
+            chatViewModel.bindUserSession("", "")
             navPrefs.edit()
                 .remove("last_auth_screen")
                 .remove("selected_contact_json")
@@ -507,6 +511,25 @@ fun MensajeriaApp(
                 }
             )
         }
+    }
+    if (chatUiState.isInCall &&
+        currentScreen != AppFlowScreen.ACCESSIBLE_CHAT &&
+        currentScreen != AppFlowScreen.STANDARD_CHAT
+    ) {
+        VoiceCallOverlay(
+            contactName = chatUiState.callPartner?.name?.ifBlank { "Contacto" } ?: "Contacto",
+            statusText = chatUiState.callStatusText,
+            durationSeconds = chatUiState.callDurationSeconds,
+            isMuted = chatUiState.isCallMuted,
+            isSpeakerphoneOn = chatUiState.isSpeakerphoneOn,
+            isAccessibleMode = isDisabilityMode,
+            isIncomingRinging = chatUiState.isIncomingCall,
+            onAcceptCall = { chatViewModel.acceptIncomingCall() },
+            onRejectCall = { chatViewModel.rejectIncomingCall() },
+            onToggleMute = { chatViewModel.toggleCallMute() },
+            onToggleSpeaker = { chatViewModel.toggleSpeakerphone() },
+            onEndCall = { chatViewModel.endVoiceCall() }
+        )
     }
     }
 }

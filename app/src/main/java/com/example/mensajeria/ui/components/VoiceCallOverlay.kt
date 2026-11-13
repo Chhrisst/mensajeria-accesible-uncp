@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
@@ -57,6 +58,9 @@ fun VoiceCallOverlay(
     isMuted: Boolean,
     isSpeakerphoneOn: Boolean,
     isAccessibleMode: Boolean,
+    isIncomingRinging: Boolean = false,
+    onAcceptCall: () -> Unit = {},
+    onRejectCall: () -> Unit = {},
     onToggleMute: () -> Unit,
     onToggleSpeaker: () -> Unit,
     onEndCall: () -> Unit
@@ -74,10 +78,10 @@ fun VoiceCallOverlay(
         label = "call_avatar"
     )
 
-    val formattedTimer = if (durationSeconds > 0) {
-        String.format(Locale.getDefault(), "%02d:%02d", durationSeconds / 60, durationSeconds % 60)
-    } else {
-        statusText
+    val formattedTimer = when {
+        durationSeconds > 0 -> String.format(Locale.getDefault(), "%02d:%02d", durationSeconds / 60, durationSeconds % 60)
+        isIncomingRinging -> "Tocando..."
+        else -> statusText
     }
 
     Box(
@@ -97,7 +101,7 @@ fun VoiceCallOverlay(
                 modifier = Modifier.padding(top = 36.dp)
             ) {
                 Text(
-                    text = "Llamada de voz cifrada",
+                    text = if (isIncomingRinging) "Llamada de voz entrante" else "Llamada de voz cifrada",
                     color = accent,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
@@ -134,13 +138,80 @@ fun VoiceCallOverlay(
                 )
             }
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 28.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            if (isIncomingRinging) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 36.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Contestar
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .exploreTarget(
+                                    id = "call_accept",
+                                    label = "Contestar llamada de $contactName"
+                                )
+                                .clip(CircleShape)
+                                .background(accent)
+                                .clickable(role = Role.Button, onClick = onAcceptCall)
+                                .semantics {
+                                    this.role = Role.Button
+                                    this.contentDescription = "Contestar llamada de $contactName"
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Call,
+                                contentDescription = null,
+                                tint = PureBlack,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Contestar", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    // Rechazar
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .exploreTarget(
+                                    id = "call_reject",
+                                    label = "Rechazar llamada de $contactName"
+                                )
+                                .clip(CircleShape)
+                                .background(Color(0xFFE53935))
+                                .clickable(role = Role.Button, onClick = onRejectCall)
+                                .semantics {
+                                    this.role = Role.Button
+                                    this.contentDescription = "Rechazar llamada de $contactName"
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CallEnd,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Rechazar", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 28.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                 // Altavoz
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
@@ -217,6 +288,7 @@ fun VoiceCallOverlay(
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(if (isMuted) "Silenciado" else "Silenciar", color = Color.White, fontSize = 13.sp)
+                }
                 }
             }
         }
