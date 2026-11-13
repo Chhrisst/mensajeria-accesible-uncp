@@ -100,7 +100,12 @@ fun VoiceCallOverlay(
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(top = 36.dp)
+                modifier = Modifier
+                    .padding(top = 36.dp)
+                    .exploreTarget(
+                        id = "call_header_info",
+                        label = "Llamada con $contactName, duración $formattedTimer"
+                    )
             ) {
                 Text(
                     text = if (isIncomingRinging) "Llamada de voz entrante" else "Llamada de voz cifrada",

@@ -129,6 +129,22 @@ fun AccessibleChatScreen(
             .navigationBarsPadding()
             .padding(16.dp)
     ) {
+        if (uiState.isInCall) {
+            VoiceCallOverlay(
+                contactName = uiState.callPartner?.name?.ifBlank { contact.name } ?: contact.name,
+                statusText = uiState.callStatusText,
+                durationSeconds = uiState.callDurationSeconds,
+                isMuted = uiState.isCallMuted,
+                isSpeakerphoneOn = uiState.isSpeakerphoneOn,
+                isAccessibleMode = true,
+                isIncomingRinging = uiState.isIncomingCall,
+                onAcceptCall = { chatViewModel.acceptIncomingCall() },
+                onRejectCall = { chatViewModel.rejectIncomingCall() },
+                onToggleMute = { chatViewModel.toggleCallMute() },
+                onToggleSpeaker = { chatViewModel.toggleSpeakerphone() },
+                onEndCall = { chatViewModel.endVoiceCall() }
+            )
+        } else {
             Column(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.SpaceBetween
@@ -421,22 +437,6 @@ fun AccessibleChatScreen(
                     }
                 }
             }
-
-        if (uiState.isInCall) {
-            VoiceCallOverlay(
-                contactName = uiState.callPartner?.name?.ifBlank { contact.name } ?: contact.name,
-                statusText = uiState.callStatusText,
-                durationSeconds = uiState.callDurationSeconds,
-                isMuted = uiState.isCallMuted,
-                isSpeakerphoneOn = uiState.isSpeakerphoneOn,
-                isAccessibleMode = true,
-                isIncomingRinging = uiState.isIncomingCall,
-                onAcceptCall = { chatViewModel.acceptIncomingCall() },
-                onRejectCall = { chatViewModel.rejectIncomingCall() },
-                onToggleMute = { chatViewModel.toggleCallMute() },
-                onToggleSpeaker = { chatViewModel.toggleSpeakerphone() },
-                onEndCall = { chatViewModel.endVoiceCall() }
-            )
         }
     }
 }

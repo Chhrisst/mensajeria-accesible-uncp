@@ -372,15 +372,35 @@ fun MensajeriaApp(
         else -> true
     }
 
+    val explorationKey = if (chatUiState.isInCall) "CALL_OVERLAY" else currentScreen
     AccessibleTouchExplorationHost(
         enabled = isExploreEnabled,
-        screenKey = currentScreen,
+        screenKey = explorationKey,
         onExploreHover = { shortLabel ->
             authViewModel.triggerHoverVibration()
             authViewModel.ttsService.speak(shortLabel)
         }
     ) {
-    when (currentScreen) {
+        if (chatUiState.isInCall &&
+            currentScreen != AppFlowScreen.ACCESSIBLE_CHAT &&
+            currentScreen != AppFlowScreen.STANDARD_CHAT
+        ) {
+            VoiceCallOverlay(
+                contactName = chatUiState.callPartner?.name?.ifBlank { "Contacto" } ?: "Contacto",
+                statusText = chatUiState.callStatusText,
+                durationSeconds = chatUiState.callDurationSeconds,
+                isMuted = chatUiState.isCallMuted,
+                isSpeakerphoneOn = chatUiState.isSpeakerphoneOn,
+                isAccessibleMode = isDisabilityMode,
+                isIncomingRinging = chatUiState.isIncomingCall,
+                onAcceptCall = { chatViewModel.acceptIncomingCall() },
+                onRejectCall = { chatViewModel.rejectIncomingCall() },
+                onToggleMute = { chatViewModel.toggleCallMute() },
+                onToggleSpeaker = { chatViewModel.toggleSpeakerphone() },
+                onEndCall = { chatViewModel.endVoiceCall() }
+            )
+        } else {
+            when (currentScreen) {
         // 0. PERMISOS
         AppFlowScreen.PERMISSION_CHECK -> {
             PermissionScreen(
@@ -605,24 +625,6 @@ fun MensajeriaApp(
             )
         }
     }
-    if (chatUiState.isInCall &&
-        currentScreen != AppFlowScreen.ACCESSIBLE_CHAT &&
-        currentScreen != AppFlowScreen.STANDARD_CHAT
-    ) {
-        VoiceCallOverlay(
-            contactName = chatUiState.callPartner?.name?.ifBlank { "Contacto" } ?: "Contacto",
-            statusText = chatUiState.callStatusText,
-            durationSeconds = chatUiState.callDurationSeconds,
-            isMuted = chatUiState.isCallMuted,
-            isSpeakerphoneOn = chatUiState.isSpeakerphoneOn,
-            isAccessibleMode = isDisabilityMode,
-            isIncomingRinging = chatUiState.isIncomingCall,
-            onAcceptCall = { chatViewModel.acceptIncomingCall() },
-            onRejectCall = { chatViewModel.rejectIncomingCall() },
-            onToggleMute = { chatViewModel.toggleCallMute() },
-            onToggleSpeaker = { chatViewModel.toggleSpeakerphone() },
-            onEndCall = { chatViewModel.endVoiceCall() }
-        )
     }
     }
 }

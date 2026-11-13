@@ -136,7 +136,23 @@ fun StandardChatScreen(
             .background(backgroundDark)
             .navigationBarsPadding()
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        if (uiState.isInCall) {
+            VoiceCallOverlay(
+                contactName = uiState.callPartner?.name?.ifBlank { activeContact.name } ?: activeContact.name,
+                statusText = uiState.callStatusText,
+                durationSeconds = uiState.callDurationSeconds,
+                isMuted = uiState.isCallMuted,
+                isSpeakerphoneOn = uiState.isSpeakerphoneOn,
+                isAccessibleMode = false,
+                isIncomingRinging = uiState.isIncomingCall,
+                onAcceptCall = { chatViewModel.acceptIncomingCall() },
+                onRejectCall = { chatViewModel.rejectIncomingCall() },
+                onToggleMute = { chatViewModel.toggleCallMute() },
+                onToggleSpeaker = { chatViewModel.toggleSpeakerphone() },
+                onEndCall = { chatViewModel.endVoiceCall() }
+            )
+        } else {
+            Column(modifier = Modifier.fillMaxSize()) {
             // CABECERA ESTILO WHATSAPP CON ESTADO DE CONEXIÓN Y BOTÓN DE LLAMADA
             Box(
                 modifier = Modifier
@@ -521,22 +537,6 @@ fun StandardChatScreen(
                 }
             }
         }
-
-        if (uiState.isInCall) {
-            VoiceCallOverlay(
-                contactName = uiState.callPartner?.name?.ifBlank { activeContact.name } ?: activeContact.name,
-                statusText = uiState.callStatusText,
-                durationSeconds = uiState.callDurationSeconds,
-                isMuted = uiState.isCallMuted,
-                isSpeakerphoneOn = uiState.isSpeakerphoneOn,
-                isAccessibleMode = false,
-                isIncomingRinging = uiState.isIncomingCall,
-                onAcceptCall = { chatViewModel.acceptIncomingCall() },
-                onRejectCall = { chatViewModel.rejectIncomingCall() },
-                onToggleMute = { chatViewModel.toggleCallMute() },
-                onToggleSpeaker = { chatViewModel.toggleSpeakerphone() },
-                onEndCall = { chatViewModel.endVoiceCall() }
-            )
-        }
     }
+}
 }
