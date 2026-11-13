@@ -258,9 +258,19 @@ fun MensajeriaApp(
             }
         }
         voiceAssistantManager.getCurrentUser = { currentUser.name }
+        voiceAssistantManager.getCurrentUsername = { currentUser.username }
         voiceAssistantManager.getCurrentUserId = { currentUser.id }
         voiceAssistantManager.getActiveChatContact = {
             if (currentScreen == AppFlowScreen.ACCESSIBLE_CHAT) selectedContact else null
+        }
+        voiceAssistantManager.onSummarizeLastMessage = {
+            chatViewModel.summarizeLastMessage()
+        }
+        voiceAssistantManager.onStartCall = {
+            chatViewModel.startVoiceCall()
+        }
+        voiceAssistantManager.onStartVoiceNote = {
+            chatViewModel.startVoiceNoteRecording()
         }
 
         voiceAssistantManager.stopAssistant()

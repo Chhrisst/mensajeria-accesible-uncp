@@ -17,9 +17,22 @@ class AuthValidationTest {
 
     @Test
     fun passwordValidation() {
-        assertNull(AuthViewModel.validatePassword("secreto1"))
+        assertNull(AuthViewModel.validatePassword("Secreto1@"))
+        assertNull(AuthViewModel.validatePassword("MiClave*2026"))
         assertNotNull(AuthViewModel.validatePassword("12345"))
+        assertNotNull(AuthViewModel.validatePassword("secreto1")) // sin mayúscula ni carácter especial
+        assertNotNull(AuthViewModel.validatePassword("Secreto1")) // sin carácter especial
+        assertNotNull(AuthViewModel.validatePassword("Secreto@")) // sin número
         assertNotNull(AuthViewModel.validatePassword("       "))
+    }
+
+    @Test
+    fun phoneCountryValidation() {
+        val peru = com.example.mensajeria.data.model.CountryPhoneCatalog.peru
+        assertNull(AuthViewModel.validatePhoneForCountry("987654321", peru))
+        assertNotNull(AuthViewModel.validatePhoneForCountry("98765", peru))
+        assertNotNull(AuthViewModel.validatePhoneForCountry("9876543210", peru))
+        assertNotNull(AuthViewModel.validatePhoneForCountry("98765abc1", peru))
     }
 
     @Test

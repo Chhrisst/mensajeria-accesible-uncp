@@ -99,7 +99,8 @@ class ChatRepository(private val context: Context? = null) {
             name = name,
             username = username,
             description = (raw.description as String?) ?: "",
-            isOnline = raw.isOnline
+            isOnline = raw.isOnline,
+            lastSeenTime = (raw.lastSeenTime as String?) ?: ""
         )
     }
 
@@ -113,7 +114,9 @@ class ChatRepository(private val context: Context? = null) {
             timestamp = raw.timestamp,
             senderName = (raw.senderName as String?) ?: if (raw.isOutgoing) "Tú" else "Contacto",
             isVoiceNote = raw.isVoiceNote,
-            voiceDurationSeconds = raw.voiceDurationSeconds
+            voiceDurationSeconds = raw.voiceDurationSeconds,
+            audioBase64 = (raw.audioBase64 as String?) ?: "",
+            formattedTime = (raw.formattedTime as String?) ?: ""
         )
     }
 
@@ -129,13 +132,32 @@ class ChatRepository(private val context: Context? = null) {
         } else {
             c.visualCondition ?: ""
         }
+        val rawTime = c.lastMessageTime?.takeIf { Regex("^\\d{1,2}:\\d{2}$").matches(it.trim()) } ?: ""
+        // Determinar estado de conexión: en línea si el servidor lo reporta o si hay actividad reciente
+        val isOnlineNow = (c.isOnline == true) || isTimeWithinMinutes(rawTime, 5)
         return Contact(
             id = id,
             name = name,
             username = username,
             description = decryptedDesc,
-            isOnline = c.isOnline ?: false
+            isOnline = isOnlineNow,
+            lastSeenTime = rawTime
         )
+    }
+
+    private fun isTimeWithinMinutes(hhMm: String, maxMinutes: Int): Boolean {
+        if (!Regex("^\\d{1,2}:\\d{2}$").matches(hhMm.trim())) return false
+        return try {
+            val parts = hhMm.trim().split(":")
+            val msgHour = parts[0].toInt()
+            val msgMin = parts[1].toInt()
+            val now = java.util.Calendar.getInstance()
+            val nowTotal = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE)
+            val msgTotal = msgHour * 60 + msgMin
+            kotlin.math.abs(nowTotal - msgTotal) <= maxMinutes
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun persistContacts(userId: String) {
@@ -348,16 +370,34 @@ class ChatRepository(private val context: Context? = null) {
             if (response.isSuccessful && apiMsgs != null) {
                 val mapped = apiMsgs.mapNotNull { m ->
                     val id = m?.id?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                    if (m.messageType == "CALL_STREAM") return@mapNotNull null
                     val isFromMe = m.isFromMe || (m.senderId == userId)
                     val clearContent = E2EEncryptionManager.decrypt(m.content ?: "", userId, contactId)
+                    val clearAudio = if (!m.audioUrl.isNullOrBlank()) {
+                        E2EEncryptionManager.decrypt(m.audioUrl, userId, contactId)
+                    } else ""
                     Message(
                         id = id,
                         text = clearContent,
                         isOutgoing = isFromMe,
                         senderName = if (isFromMe) "Tú" else "Contacto",
                         isVoiceNote = (m.messageType == "AUDIO"),
-                        voiceDurationSeconds = m.audioDurationSeconds
+                        voiceDurationSeconds = m.audioDurationSeconds,
+                        audioBase64 = clearAudio,
+                        formattedTime = m.createdAt ?: ""
                     )
+                }
+                // Actualizar hora de última conexión del contacto según su último mensaje recibido
+                val lastIncoming = mapped.lastOrNull { !it.isOutgoing }
+                if (lastIncoming != null && lastIncoming.formattedTime.isNotBlank()) {
+                    val isNowOnline = isTimeWithinMinutes(lastIncoming.formattedTime, 5)
+                    _contacts.update { list ->
+                        list.map { c ->
+                            if (c.id == contactId) {
+                                c.copy(isOnline = c.isOnline || isNowOnline, lastSeenTime = lastIncoming.formattedTime)
+                            } else c
+                        }
+                    }
                 }
                 val serverIds = mapped.mapTo(HashSet()) { it.id }
                 // Conservar los mensajes locales aún no confirmados por el servidor
@@ -383,29 +423,41 @@ class ChatRepository(private val context: Context? = null) {
         contactId: String,
         text: String,
         isVoiceNote: Boolean = false,
-        voiceDurationSeconds: Int = 0
+        voiceDurationSeconds: Int = 0,
+        audioBase64: String = "",
+        messageTypeOverride: String? = null
     ): Result<Message> {
+        val nowTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
         val localMessage = Message(
             text = text,
             isOutgoing = true,
             senderName = "Tú",
             isVoiceNote = isVoiceNote,
-            voiceDurationSeconds = voiceDurationSeconds
+            voiceDurationSeconds = voiceDurationSeconds,
+            audioBase64 = audioBase64,
+            formattedTime = nowTime
         )
         // Añadir a la UI de inmediato (optimistic update)
-        unsyncedMessageIds.add(localMessage.id)
-        if (getMessagesPrefKey(userId, contactId) == currentConversationKey) {
-            _messages.update { it + localMessage }
-            persistMessages(userId, contactId)
+        val isInternalCallStream = messageTypeOverride == "CALL_STREAM"
+        if (!isInternalCallStream) {
+            unsyncedMessageIds.add(localMessage.id)
+            if (getMessagesPrefKey(userId, contactId) == currentConversationKey) {
+                _messages.update { it + localMessage }
+                persistMessages(userId, contactId)
+            }
         }
 
         return try {
             val encryptedPayload = E2EEncryptionManager.encrypt(text, userId, contactId)
+            val encryptedAudio = if (audioBase64.isNotBlank()) {
+                E2EEncryptionManager.encrypt(audioBase64, userId, contactId)
+            } else null
             val request = ApiSendMessageRequest(
                 senderId = userId,
                 receiverId = contactId,
                 content = encryptedPayload,
-                messageType = if (isVoiceNote) "AUDIO" else "TEXT",
+                messageType = messageTypeOverride ?: if (isVoiceNote) "AUDIO" else "TEXT",
+                audioUrl = encryptedAudio,
                 audioDurationSeconds = voiceDurationSeconds
             )
             val response = RetrofitClient.api.sendMessage(request)
@@ -436,13 +488,21 @@ class ChatRepository(private val context: Context? = null) {
         }
     }
 
-    fun sendMessage(text: String, isVoiceNote: Boolean = false, voiceDurationSeconds: Int = 0) {
+    fun sendMessage(
+        text: String,
+        isVoiceNote: Boolean = false,
+        voiceDurationSeconds: Int = 0,
+        audioBase64: String = ""
+    ) {
+        val nowTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
         val newMessage = Message(
             text = text,
             isOutgoing = true,
             senderName = "Tú",
             isVoiceNote = isVoiceNote,
-            voiceDurationSeconds = voiceDurationSeconds
+            voiceDurationSeconds = voiceDurationSeconds,
+            audioBase64 = audioBase64,
+            formattedTime = nowTime
         )
         _messages.update { it + newMessage }
     }

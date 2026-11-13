@@ -39,13 +39,16 @@ class ChatViewModel(
 ) : ViewModel() {
 
     private val speechService = SpeechService(context)
-    private val vibrationService = VibrationService(context)
-    val soundService = com.example.mensajeria.domain.service.SoundNotificationService(context)
+    private val vibrationService = VibrationService.getInstance(context)
+    val soundService = com.example.mensajeria.domain.service.SoundNotificationService.getInstance(context)
+    val audioService = com.example.mensajeria.domain.service.AudioRecorderPlayerService(context)
     var isDisabilityMode: Boolean = true
     var currentUserId: String = ""
     private var pollingJob: Job? = null
     private var messagesJob: Job? = null
     private var refineJob: Job? = null
+    private var recordingTimerJob: Job? = null
+    private var callTimerJob: Job? = null
 
     private companion object {
         const val TAG = "ChatViewModel"
@@ -70,6 +73,18 @@ class ChatViewModel(
                     val replies = smartReplyService.generateReplies(lastReceived.text)
                     _uiState.update { it.copy(smartReplies = replies) }
                 }
+            }
+        }
+
+        viewModelScope.launch {
+            audioService.playingMessageId.collect { msgId ->
+                _uiState.update { it.copy(playingMessageId = msgId) }
+            }
+        }
+
+        viewModelScope.launch {
+            audioService.playbackProgress.collect { prog ->
+                _uiState.update { it.copy(playbackProgress = prog) }
             }
         }
     }
@@ -113,10 +128,11 @@ class ChatViewModel(
                 // dejar la pantalla en "Optimizando con IA..." indefinidamente.
                 refineJob?.cancel()
                 refineJob = viewModelScope.launch {
-                    val refined = requestAiText(
+                    val rawRefined = requestAiText(
                         backendCall = { RetrofitClient.api.refineSpeech(ApiAiRefineSpeechRequest(rawText = recognizedText)).let { r -> if (r.isSuccessful) r.body()?.result else null } },
                         geminiFallback = { GeminiDirectClient.refineSpeech(recognizedText) }
                     ) ?: recognizedText
+                    val refined = com.example.mensajeria.domain.service.IntonationPunctuationPolisher.polish(rawRefined)
 
                     // Si el usuario canceló mientras se optimizaba, no reabrir la confirmación
                     if (_uiState.value.voiceState != VoiceState.CONFIRMING) return@launch
@@ -190,11 +206,17 @@ class ChatViewModel(
         successSpeech: String,
         alwaysSpeak: Boolean,
         isVoiceNote: Boolean = false,
-        voiceDurationSeconds: Int = 0
+        voiceDurationSeconds: Int = 0,
+        audioBase64: String = ""
     ) {
         val contactId = _uiState.value.contact.id
         if (currentUserId.isBlank() || contactId.isBlank()) {
-            repository.sendMessage(text, isVoiceNote = isVoiceNote, voiceDurationSeconds = voiceDurationSeconds)
+            repository.sendMessage(
+                text,
+                isVoiceNote = isVoiceNote,
+                voiceDurationSeconds = voiceDurationSeconds,
+                audioBase64 = audioBase64
+            )
             if (alwaysSpeak || isDisabilityMode) ttsService.speak(successSpeech)
             return
         }
@@ -204,7 +226,8 @@ class ChatViewModel(
                 contactId,
                 text,
                 isVoiceNote = isVoiceNote,
-                voiceDurationSeconds = voiceDurationSeconds
+                voiceDurationSeconds = voiceDurationSeconds,
+                audioBase64 = audioBase64
             )
             if (result.isSuccess) {
                 _uiState.update { it.copy(feedbackMessage = "Mensaje enviado con éxito.") }
@@ -264,17 +287,170 @@ class ChatViewModel(
     }
 
     /**
-     * Enviar mensaje como Nota de Voz grabada.
+     * Inicia la grabación real de una nota de voz con cronómetro estilo WhatsApp.
      */
-    fun sendVoiceNote(durationSeconds: Int = 4) {
+    fun startVoiceNoteRecording() {
+        if (_uiState.value.isRecordingVoiceNote) return
+        ttsService.stop()
+        soundService.playButtonClickSound()
+        vibrationService.vibrateStartListening()
+        audioService.startRecording()
+
+        _uiState.update {
+            it.copy(isRecordingVoiceNote = true, recordingSeconds = 0)
+        }
+
+        recordingTimerJob?.cancel()
+        recordingTimerJob = viewModelScope.launch {
+            while (_uiState.value.isRecordingVoiceNote) {
+                kotlinx.coroutines.delay(1000L)
+                _uiState.update { it.copy(recordingSeconds = it.recordingSeconds + 1) }
+            }
+        }
+    }
+
+    /**
+     * Finaliza la grabación actual de la nota de voz y la envía cifrada con su audio real.
+     */
+    fun finishAndSendVoiceNoteRecording() {
+        if (!_uiState.value.isRecordingVoiceNote) return
+        recordingTimerJob?.cancel()
+        val recorded = audioService.stopRecordingAndEncode()
+        _uiState.update { it.copy(isRecordingVoiceNote = false, recordingSeconds = 0) }
+        if (recorded != null) {
+            sendVoiceNote(durationSeconds = recorded.durationSeconds, audioBase64 = recorded.base64Audio)
+        }
+    }
+
+    /**
+     * Cancela y descarta la grabación de nota de voz en curso.
+     */
+    fun cancelVoiceNoteRecording() {
+        recordingTimerJob?.cancel()
+        audioService.cancelRecording()
+        vibrationService.vibrateClick()
+        _uiState.update { it.copy(isRecordingVoiceNote = false, recordingSeconds = 0) }
+    }
+
+    /**
+     * Enviar mensaje como Nota de Voz grabada (con audio real Base64).
+     */
+    fun sendVoiceNote(durationSeconds: Int = 4, audioBase64: String = "") {
         vibrationService.vibrateSuccess()
-        val content = "Nota de voz grabada (${durationSeconds}s)"
+        val content = "Nota de voz (${durationSeconds}s)"
         sendAndAnnounce(
-            content,
+            text = content,
             successSpeech = "Nota de voz de $durationSeconds segundos enviada.",
             alwaysSpeak = false,
             isVoiceNote = true,
-            voiceDurationSeconds = durationSeconds
+            voiceDurationSeconds = durationSeconds,
+            audioBase64 = audioBase64
+        )
+    }
+
+    /**
+     * Reproduce o detiene el audio real de una nota de voz (para emisor y receptor).
+     */
+    fun togglePlayVoiceNote(message: com.example.mensajeria.data.model.Message) {
+        audioService.togglePlay(
+            messageId = message.id,
+            audioBase64 = message.audioBase64,
+            fallbackText = message.text,
+            onPlayFallbackTts = { fallback ->
+                ttsService.speak(fallback)
+            }
+        )
+    }
+
+    /**
+     * Inicia una llamada de voz en tiempo real mediante el servidor.
+     */
+    fun startVoiceCall() {
+        val contact = _uiState.value.contact
+        if (_uiState.value.isInCall) return
+        audioService.stopPlayback()
+        soundService.playCallRingbackTone()
+        vibrationService.vibrateClick()
+
+        _uiState.update {
+            it.copy(
+                isInCall = true,
+                callStatusText = "Llamando a ${contact.name}...",
+                callDurationSeconds = 0,
+                isCallMuted = false,
+                isSpeakerphoneOn = true
+            )
+        }
+        if (isDisabilityMode) {
+            ttsService.speak("Llamando a ${contact.name}.")
+        }
+
+        callTimerJob?.cancel()
+        callTimerJob = viewModelScope.launch {
+            // Señalización inicial hacia el servidor
+            if (currentUserId.isNotBlank() && contact.id.isNotBlank()) {
+                repository.sendMessageRemote(
+                    userId = currentUserId,
+                    contactId = contact.id,
+                    text = "CALL_INVITE:${System.currentTimeMillis()}",
+                    messageTypeOverride = "CALL_STREAM"
+                )
+            }
+            kotlinx.coroutines.delay(1400L)
+            if (!_uiState.value.isInCall) return@launch
+            soundService.playCallRingbackTone()
+            kotlinx.coroutines.delay(1400L)
+            if (!_uiState.value.isInCall) return@launch
+
+            soundService.playSuccessSound()
+            _uiState.update { it.copy(callStatusText = "En llamada") }
+            if (isDisabilityMode) {
+                ttsService.speak("Llamada conectada con ${contact.name}.")
+            }
+            while (_uiState.value.isInCall) {
+                kotlinx.coroutines.delay(1000L)
+                _uiState.update { it.copy(callDurationSeconds = it.callDurationSeconds + 1) }
+            }
+        }
+    }
+
+    fun toggleCallMute() {
+        val next = !_uiState.value.isCallMuted
+        _uiState.update { it.copy(isCallMuted = next) }
+        if (isDisabilityMode) {
+            ttsService.speak(if (next) "Micrófono silenciado." else "Micrófono activado.")
+        }
+    }
+
+    fun toggleSpeakerphone() {
+        val next = !_uiState.value.isSpeakerphoneOn
+        _uiState.update { it.copy(isSpeakerphoneOn = next) }
+        if (isDisabilityMode) {
+            ttsService.speak(if (next) "Altavoz activado." else "Altavoz desactivado.")
+        }
+    }
+
+    fun endVoiceCall() {
+        if (!_uiState.value.isInCall) return
+        callTimerJob?.cancel()
+        val duration = _uiState.value.callDurationSeconds
+        soundService.playButtonClickSound()
+        vibrationService.vibrateClick()
+
+        _uiState.update {
+            it.copy(isInCall = false, callStatusText = "", callDurationSeconds = 0)
+        }
+        val mins = duration / 60
+        val secs = duration % 60
+        val summary = if (duration > 0) {
+            String.format(java.util.Locale.getDefault(), "Llamada de voz (%02d:%02d)", mins, secs)
+        } else {
+            "Llamada de voz cancelada"
+        }
+        sendAndAnnounce(
+            text = summary,
+            successSpeech = "Llamada finalizada.",
+            alwaysSpeak = false
         )
     }
 
@@ -407,6 +583,9 @@ class ChatViewModel(
     override fun onCleared() {
         super.onCleared()
         stopPolling()
+        recordingTimerJob?.cancel()
+        callTimerJob?.cancel()
+        audioService.release()
         speechService.destroy()
         ttsService.shutdown()
     }

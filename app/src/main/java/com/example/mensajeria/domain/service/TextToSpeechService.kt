@@ -97,17 +97,26 @@ class TextToSpeechService(
             }
 
             try {
-                val availableVoices = tts?.voices?.filter { v ->
-                    v.locale.language == "es" && !v.isNetworkConnectionRequired
+                // Elegir la voz en español de mayor calidad (sin filtrar voces neuronales por red)
+                val spanishVoices = tts?.voices?.filter { v ->
+                    v.locale.language == "es"
                 } ?: emptyList()
-                val bestVoice = availableVoices.maxByOrNull { it.quality }
-                if (bestVoice != null) {
-                    tts?.voice = bestVoice
+                val highQualityVoice = spanishVoices
+                    .filter { it.quality >= android.speech.tts.Voice.QUALITY_HIGH }
+                    .maxWithOrNull(
+                        compareBy<android.speech.tts.Voice> {
+                            it.locale.country.equals("PE", ignoreCase = true) ||
+                                it.locale.country.equals("MX", ignoreCase = true) ||
+                                it.locale.country.equals("ES", ignoreCase = true)
+                        }.thenBy { it.quality }
+                    )
+                if (highQualityVoice != null) {
+                    tts?.voice = highQualityVoice
                 }
             } catch (_: Exception) {}
 
             tts?.setPitch(1.0f)
-            tts?.setSpeechRate(0.92f) // Ritmo natural y claro que respeta las pausas de comas y puntos
+            tts?.setSpeechRate(0.97f) // Ritmo fluido, cálido y natural que respeta signos de puntuación
             tts?.setOnUtteranceProgressListener(progressListener)
         } catch (e: Exception) {
             Log.e(TAG, "Error configurando el motor TTS: ${e.message}")

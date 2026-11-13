@@ -108,23 +108,23 @@ fun AccessibleVoiceRegisterScreen(
     fun startListeningForUsername() {
         if (!hasRecordPermission) return
 
-        feedbackText = "Di tu nombre de usuario único en voz alta..."
+        feedbackText = "Habla después del tono y di tu nombre de usuario único..."
         isListening = true
 
         authViewModel.ttsService.speak(
-            "Nombre recibido: $registeredName. Ahora, di tu nombre de usuario único, por ejemplo carlos20 o charly.",
+            "Nombre recibido: $registeredName. Ahora, habla después del tono y di tu nombre de usuario único, por ejemplo carlos20 o charly.",
             onDone = {
                 coroutineScope.launch {
-                    delay(450)
+                    delay(600)
                     authViewModel.startRegistrationVoiceInput(
                         onResult = { rawUsername ->
                             isListening = false
                             val cleanUser = rawUsername.trim().lowercase().replace(" ", "_")
                                 .filter { it.isLetterOrDigit() || it == '_' }
                             if (cleanUser.length < 3) {
-                                feedbackText = "El nombre de usuario debe tener al menos 3 letras. Intenta de nuevo."
+                                feedbackText = "El usuario debe tener al menos 3 letras. Pulsa el botón de voz para reintentar."
                                 authViewModel.ttsService.speak(
-                                    "El nombre de usuario debe tener al menos tres letras. Di otro nombre de usuario."
+                                    "El nombre de usuario debe tener al menos tres letras. Pulsa el botón de voz en el centro de la pantalla para activar el micrófono nuevamente, y habla después del tono."
                                 )
                                 return@startRegistrationVoiceInput
                             }
@@ -132,9 +132,9 @@ fun AccessibleVoiceRegisterScreen(
                             coroutineScope.launch {
                                 val available = authViewModel.checkUsernameAvailability(cleanUser)
                                 if (!available) {
-                                    feedbackText = "El usuario @$cleanUser ya está registrado. Di otro diferente."
+                                    feedbackText = "El usuario @$cleanUser ya está registrado. Pulsa el botón de voz para decir otro."
                                     authViewModel.ttsService.speak(
-                                        "El nombre de usuario $cleanUser ya está registrado. Por favor, di otro nombre de usuario diferente."
+                                        "El nombre de usuario $cleanUser ya está registrado. Pulsa el botón de voz en el centro de la pantalla para intentar nuevamente, y habla después del tono diciendo otro usuario."
                                     )
                                 } else {
                                     registeredUsername = cleanUser
@@ -147,9 +147,9 @@ fun AccessibleVoiceRegisterScreen(
                         },
                         onError = { error ->
                             isListening = false
-                            feedbackText = "No se escuchó claramente. Presiona Reintentar Dictado."
+                            feedbackText = "No se escuchó tu usuario. Pulsa el botón de voz en el centro para intentar de nuevo."
                             authViewModel.ttsService.speak(
-                                "No se escuchó claramente el nombre de usuario. Toca el botón Reintentar Dictado para intentarlo de nuevo."
+                                "No se escuchó ningún nombre de usuario. Pulsa el botón de voz en el centro de la pantalla para activar el micrófono nuevamente, y habla después del tono."
                             )
                         }
                     )
@@ -167,27 +167,26 @@ fun AccessibleVoiceRegisterScreen(
         registeredName = ""
         registeredUsername = ""
         sidePatternEntered = ""
-        feedbackText = "Diga su nombre completo en voz alta..."
+        feedbackText = "Habla después del tono y di tu nombre completo..."
         isListening = true
 
         authViewModel.ttsService.speak(
-            "Por favor, di tu nombre completo en voz alta.",
+            "Registro por voz. Habla después del tono y di tu nombre completo.",
             onDone = {
-                // Pausa de 350ms para que el hardware de audio termine de liberar el altavoz
                 coroutineScope.launch {
-                    delay(450)
+                    delay(550)
                     authViewModel.startRegistrationVoiceInput(
                         onResult = { recognizedName ->
                             isListening = false
                             registeredName = recognizedName
-                            feedbackText = "Nombre recibido: $recognizedName. Di tu nombre de usuario único..."
+                            feedbackText = "Nombre recibido: $recognizedName. Preparando dictado de usuario..."
                             startListeningForUsername()
                         },
                         onError = { error ->
                             isListening = false
-                            feedbackText = "No se escuchó claramente. Presiona Reintentar Dictado."
+                            feedbackText = "No se escuchó tu nombre. Pulsa el botón de voz para intentar de nuevo."
                             authViewModel.ttsService.speak(
-                                "No se escuchó claramente. Toca el botón Reintentar Dictado para intentarlo de nuevo."
+                                "No se escuchó claramente tu nombre. Pulsa el botón de voz en el centro de la pantalla para activar el micrófono nuevamente, y habla después del tono."
                             )
                         }
                     )

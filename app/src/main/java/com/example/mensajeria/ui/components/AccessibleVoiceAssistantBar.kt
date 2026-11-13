@@ -86,7 +86,7 @@ fun AccessibleVoiceAssistantBar(
     }
 
     val statusTitle = when (state.mode) {
-        AssistantMode.ACTIVE_LISTENING -> "¡Te escucho! Di tu orden..."
+        AssistantMode.ACTIVE_LISTENING -> "¡Te escucho! Habla tras el tono"
         AssistantMode.PROCESSING -> "Asistente pensando..."
         AssistantMode.SPEAKING -> "Asistente respondiendo..."
         AssistantMode.STANDBY -> "Asistente de Voz IA"
@@ -95,12 +95,12 @@ fun AccessibleVoiceAssistantBar(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .height(72.dp)
-            .exploreTarget(id = "voice_assistant_bar", label = "Asistente de voz IA")
+            .height(82.dp)
+            .exploreTarget(id = "voice_assistant_bar", label = "Asistente de voz IA. Pulsa para enviar mensaje de texto, nota de voz o consultar.")
             .clickable(onClick = onAssistantClick)
             .semantics {
                 this.role = Role.Button
-                this.contentDescription = "$statusTitle. ${state.feedbackMessage}. Toca para hablarle al asistente."
+                this.contentDescription = "$statusTitle. ${state.feedbackMessage}. Pulsa para activar la voz."
                 this.liveRegion = LiveRegionMode.Polite
             },
         shape = RoundedCornerShape(20.dp),

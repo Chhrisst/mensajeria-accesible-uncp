@@ -290,9 +290,23 @@ fun StandardContactListScreen(
                             Spacer(modifier = Modifier.height(3.dp))
 
                             Text(
+                                text = if (contact.isOnline) {
+                                    "● En línea"
+                                } else {
+                                    "Conectado última vez a la(s) ${contact.getLastSeenDisplay()}"
+                                },
+                                color = if (contact.isOnline) whatsappGreen else TextSecondaryGray,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            Spacer(modifier = Modifier.height(2.dp))
+
+                            Text(
                                 text = contact.description.ifBlank { "Toca para iniciar la conversación" },
                                 color = TextSecondaryGray,
-                                fontSize = 14.sp,
+                                fontSize = 13.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )

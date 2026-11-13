@@ -93,8 +93,8 @@ fun AccessibleContactListScreen(
             focusedIndex = clamped
             authViewModel.triggerHoverVibration()
             val contact = contacts[clamped]
-            // Solo dice el nombre del contacto, nada más
-            authViewModel.ttsService.speak(contact.name)
+            val handlePart = if (contact.username.isNotBlank()) ", usuario arroba ${contact.username}" else ""
+            authViewModel.ttsService.speak("${contact.name}$handlePart, ${contact.getConnectionStatusText()}")
         }
     }
 
@@ -172,10 +172,11 @@ fun AccessibleContactListScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val myHandle = currentUser.username.ifBlank { currentUser.name.lowercase().replace(" ", "_") }
                 Column(
                     modifier = Modifier.exploreTarget(
                         id = "user_header",
-                        label = "Usuario ${currentUser.name}"
+                        label = "Usuario ${currentUser.name}, nombre de usuario arroba $myHandle"
                     )
                 ) {
                     Text(
@@ -186,7 +187,7 @@ fun AccessibleContactListScreen(
                         modifier = Modifier.semantics { heading() }
                     )
                     Text(
-                        text = "@${currentUser.username.ifBlank { currentUser.name.lowercase().replace(" ", "_") }}",
+                        text = "@$myHandle",
                         color = Color.White,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium
@@ -262,13 +263,16 @@ fun AccessibleContactListScreen(
                 } else {
                     itemsIndexed(contacts) { index, contact ->
                         val isFocused = index == focusedIndex
+                        val handleSpeech = if (contact.username.isNotBlank()) ", usuario arroba ${contact.username}" else ""
+                        val statusText = contact.getConnectionStatusText()
+                        val fullExploreLabel = "${contact.name}$handleSpeech, $statusText"
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(88.dp)
+                                .height(92.dp)
                                 .exploreTarget(
                                     id = "contact_${contact.id}_$index",
-                                    label = contact.name,
+                                    label = fullExploreLabel,
                                     onHover = { focusedIndex = index }
                                 )
                                 .clickable {
@@ -277,7 +281,7 @@ fun AccessibleContactListScreen(
                                 }
                                 .semantics {
                                     this.role = Role.Button
-                                    this.contentDescription = contact.name
+                                    this.contentDescription = fullExploreLabel
                                 },
                             shape = RoundedCornerShape(18.dp),
                             colors = CardDefaults.cardColors(
@@ -319,9 +323,12 @@ fun AccessibleContactListScreen(
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = if (contact.username.isNotBlank()) "@${contact.username}" else contact.description,
+                                        text = buildString {
+                                            if (contact.username.isNotBlank()) append("@${contact.username} • ")
+                                            append(if (contact.isOnline) "● En línea" else "Últ. vez ${contact.getLastSeenDisplay()}")
+                                        },
                                         fontSize = 13.sp,
-                                        color = if (isFocused) Color(0xFF262626) else TextSecondaryGray,
+                                        color = if (isFocused) Color(0xFF262626) else if (contact.isOnline) Color(0xFF00E676) else TextSecondaryGray,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )

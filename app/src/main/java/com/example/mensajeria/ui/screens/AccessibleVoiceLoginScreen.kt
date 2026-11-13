@@ -95,21 +95,21 @@ fun AccessibleVoiceLoginScreen(
             authViewModel.soundService.playSuccessSound()
             isListeningName = true
             sidePatternEntered = ""
-            feedbackText = "Permiso concedido. Diga su nombre de usuario..."
+            feedbackText = "Permiso concedido. Habla después del tono y di tu nombre o usuario..."
 
             authViewModel.ttsService.speak(
-                "Permiso concedido. Di tu nombre de usuario en voz alta.",
+                "Permiso concedido. Di tu nombre de cuenta o usuario después del tono.",
                 onDone = {
                     coroutineScope.launch {
-                        delay(450)
+                        delay(500)
                         authViewModel.startVoiceAuth()
                     }
                 }
             )
         } else {
-            feedbackText = "Permiso de micrófono no concedido. Pulse Conceder Permiso para habilitarlo."
+            feedbackText = "Permiso de micrófono no concedido. Pulsa el botón central para habilitarlo."
             authViewModel.ttsService.speak(
-                "El permiso de micrófono no fue concedido. Para iniciar sesión por voz, debes permitir el acceso al micrófono."
+                "El permiso de micrófono no fue concedido. Pulsa el botón de voz en el centro de la pantalla para otorgar el permiso."
             )
         }
     }
@@ -122,12 +122,12 @@ fun AccessibleVoiceLoginScreen(
 
         isListeningName = true
         sidePatternEntered = ""
-        feedbackText = "Diga su nombre de usuario en voz alta..."
+        feedbackText = "Habla después del tono y di el nombre de tu cuenta..."
         authViewModel.ttsService.speak(
-            "Para iniciar sesión, por favor di tu nombre de usuario en voz alta.",
+            "Para iniciar sesión, habla después del tono y di tu nombre de cuenta o tu usuario.",
             onDone = {
                 coroutineScope.launch {
-                    delay(450)
+                    delay(500)
                     authViewModel.startVoiceAuth()
                 }
             }
@@ -143,7 +143,7 @@ fun AccessibleVoiceLoginScreen(
         }
     }
 
-    // Observar estado de usuario detectado por AuthViewModel
+    // Observar estado de usuario detectado y errores de voz por AuthViewModel
     val voiceAuthState by authViewModel.voiceAuthState.collectAsState()
     LaunchedEffect(voiceAuthState.detectedUser) {
         if (voiceAuthState.detectedUser != null && detectedUser == null) {
@@ -153,6 +153,14 @@ fun AccessibleVoiceLoginScreen(
             authViewModel.ttsService.speak(
                 "Cuenta detectada: ${detectedUser?.name}. Pulsa de izquierda a derecha cuatro veces para ingresar tu combinación."
             )
+        }
+    }
+    LaunchedEffect(voiceAuthState.phase, voiceAuthState.errorMessage) {
+        if (voiceAuthState.phase == com.example.mensajeria.data.model.VoiceAuthPhase.ERROR && detectedUser == null) {
+            isListeningName = false
+            feedbackText = voiceAuthState.feedbackMessage.ifBlank {
+                "No se reconoció la cuenta. Pulsa el botón de voz en el centro para intentar de nuevo."
+            }
         }
     }
 

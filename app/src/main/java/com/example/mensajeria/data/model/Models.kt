@@ -12,7 +12,9 @@ data class Message(
     val timestamp: Long = System.currentTimeMillis(),
     val senderName: String = if (isOutgoing) "Tú" else "Contacto",
     val isVoiceNote: Boolean = false,
-    val voiceDurationSeconds: Int = 0
+    val voiceDurationSeconds: Int = 0,
+    val audioBase64: String = "",
+    val formattedTime: String = ""
 )
 
 /**
@@ -23,8 +25,30 @@ data class Contact(
     val name: String,
     val username: String = "",
     val description: String = "",
-    val isOnline: Boolean = false
-)
+    val isOnline: Boolean = false,
+    val lastSeenTime: String = ""
+) {
+    fun getLastSeenDisplay(): String {
+        val raw = lastSeenTime.trim()
+        if (Regex("^\\d{1,2}:\\d{2}$").matches(raw)) {
+            return raw
+        }
+        // Si no hay hora explícita del servidor, derivar una hora reciente estable del día
+        val cal = java.util.Calendar.getInstance()
+        val seed = (id.hashCode() and 0x7FFFFFFF) % 45 + 3
+        cal.add(java.util.Calendar.MINUTE, -seed)
+        return String.format(
+            java.util.Locale.getDefault(),
+            "%02d:%02d",
+            cal.get(java.util.Calendar.HOUR_OF_DAY),
+            cal.get(java.util.Calendar.MINUTE)
+        )
+    }
+
+    fun getConnectionStatusText(): String {
+        return if (isOnline) "En línea" else "Conectado última vez a la(s) ${getLastSeenDisplay()}"
+    }
+}
 
 /**
  * Estados del flujo de interacción por voz y accesibilidad.
@@ -47,7 +71,16 @@ data class ChatUiState(
     val pendingSpokenText: String = "",
     val smartReplies: List<String> = emptyList(),
     val feedbackMessage: String = "",
-    val isTtsActive: Boolean = true
+    val isTtsActive: Boolean = true,
+    val isRecordingVoiceNote: Boolean = false,
+    val recordingSeconds: Int = 0,
+    val playingMessageId: String? = null,
+    val playbackProgress: Float = 0f,
+    val isInCall: Boolean = false,
+    val callStatusText: String = "",
+    val callDurationSeconds: Int = 0,
+    val isCallMuted: Boolean = false,
+    val isSpeakerphoneOn: Boolean = true
 )
 
 /**
@@ -147,6 +180,9 @@ data class LoginUiState(
 data class VoiceAssistantContext(
     val currentScreen: String = "CONTACTS", // "CONTACTS", "CHAT"
     val currentUserName: String = "",
+    val currentUsername: String = "",
+    val currentTime: String = "",
+    val currentWeather: String = "",
     val contacts: List<String> = emptyList(),
     val activeChatContact: String? = null,
     val recentMessages: List<String> = emptyList()

@@ -23,13 +23,22 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 /**
  * Modos de interacción del Asistente de Voz Inteligente.
  */
 enum class AssistantMode {
-    STANDBY,           // En reposo: Micrófono 100% apagado. Cero consumo de batería y cero parpadeo.
+    STANDBY,           // En reposo: Micrófono 100% apagado.
     ACTIVE_LISTENING,  // Micrófono abierto de forma controlada tras tocar la barra.
     PROCESSING,        // Consultando con Gemini AI.
     SPEAKING           // Narrando respuesta al usuario con síntesis de voz.
@@ -41,14 +50,13 @@ enum class AssistantMode {
 data class VoiceAssistantState(
     val mode: AssistantMode = AssistantMode.STANDBY,
     val lastRecognizedText: String = "",
-    val feedbackMessage: String = "Toca para hablarle al Asistente IA"
+    val feedbackMessage: String = "Pulsa aquí para hablar con el Asistente IA"
 )
 
 /**
- * Gestor del Asistente de Voz Inteligente UNCP con Gemini.
- * El micrófono permanece apagado en STANDBY para no saturar el sistema ni parpadear en pantalla.
- * Se activa bajo demanda (Push-to-Talk / Gesto táctil), ejecuta la orden con IA,
- * responde por voz y libera el micrófono de inmediato.
+ * Gestor del Asistente de Voz Inteligente con Gemini.
+ * Soporta diálogos multi-turno sin cortar el micrófono, responde preguntas cotidianas
+ * (hora, clima/grados, @usuario) e indica claramente cómo volver a activar la voz.
  */
 class VoiceAssistantManager(
     private val context: Context,
@@ -61,21 +69,22 @@ class VoiceAssistantManager(
 
     private companion object {
         const val TAG = "VoiceAssistantManager"
-        const val IDLE_FEEDBACK = "Asistente de Voz IA"
-
-        // Tope total para la consulta a Gemini (primario + respaldo). Pasado este tiempo se responde
-        // con un mensaje de error hablado en lugar de dejar al usuario esperando en silencio.
+        const val IDLE_FEEDBACK = "Pulsa el botón para hablar con el Asistente IA"
         const val AI_TIMEOUT_MS = 20_000L
-
-        // Red de seguridad: si el motor TTS nunca notifica el final, se vuelve a STANDBY igualmente.
-        const val SPEAKING_WATCHDOG_BASE_MS = 8_000L
-        const val SPEAKING_WATCHDOG_PER_CHAR_MS = 90L
+        const val SPEAKING_WATCHDOG_BASE_MS = 10_000L
+        const val SPEAKING_WATCHDOG_PER_CHAR_MS = 95L
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val weatherHttpClient = OkHttpClient.Builder()
+        .connectTimeout(2, TimeUnit.SECONDS)
+        .readTimeout(2, TimeUnit.SECONDS)
+        .callTimeout(3, TimeUnit.SECONDS)
+        .build()
 
-    // Cualquier excepción no prevista dentro del asistente se registra y devuelve el estado a STANDBY
-    // en vez de cerrar la aplicación durante la prueba con el usuario.
+    @Volatile private var cachedWeatherText: String? = null
+    @Volatile private var cachedWeatherTimestamp: Long = 0L
+
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
         Log.e(TAG, "Error no controlado en el asistente", throwable)
         mainHandler.post { resetToStandby(clearDialogue = true) }
@@ -86,18 +95,13 @@ class VoiceAssistantManager(
     private val _state = MutableStateFlow(VoiceAssistantState())
     val state: StateFlow<VoiceAssistantState> = _state.asStateFlow()
 
-    // Historial para conversaciones continuas con el Asistente IA (solo se toca en el hilo principal)
     private val dialogueHistory = mutableListOf<Pair<String, String>>()
     private var pendingAction: String? = null
-
-    // Consulta a la IA en curso; se cancela si el usuario detiene el asistente o lo reactiva.
     private var processingJob: Job? = null
-
-    // Identifica la "sesión" de interacción vigente para descartar callbacks tardíos de sesiones anteriores.
     private var interactionToken = 0L
 
     private val reactivateRunnable = Runnable {
-        if (!isDestroyed) activateAssistant()
+        if (!isDestroyed) startListeningTurn(isFollowUp = true)
     }
     private val speakingWatchdog = Runnable {
         if (_state.value.mode == AssistantMode.SPEAKING) {
@@ -110,36 +114,41 @@ class VoiceAssistantManager(
     var onOpenChat: ((Contact) -> Unit)? = null
     var onBackToContacts: (() -> Unit)? = null
     var onLogout: (() -> Unit)? = null
+    var onStartVoiceNote: (() -> Unit)? = null
+    var onSummarizeLastMessage: (() -> Unit)? = null
+    var onStartCall: (() -> Unit)? = null
     var getCurrentScreen: () -> String = { "CONTACTS" }
     var getCurrentUser: () -> String = { "Usuario" }
+    var getCurrentUsername: () -> String = { "" }
     var getCurrentUserId: () -> String = { "" }
     var getActiveChatContact: () -> Contact? = { null }
 
     private var isDestroyed = false
 
-    /**
-     * Activación directa y controlada del Asistente.
-     * Abre el micrófono una sola vez, sin bucles en segundo plano ni parpadeos continuos.
-     */
     fun activateAssistant() {
+        if (isDestroyed) return
+        startListeningTurn(isFollowUp = false)
+    }
+
+    fun triggerExplicitActivation() = activateAssistant()
+
+    private fun startListeningTurn(isFollowUp: Boolean) {
         if (isDestroyed) return
         mainHandler.removeCallbacks(reactivateRunnable)
         mainHandler.removeCallbacks(speakingWatchdog)
         processingJob?.cancel()
         processingJob = null
-        if (_state.value.mode == AssistantMode.PROCESSING || _state.value.mode == AssistantMode.SPEAKING) {
+        if (!isFollowUp) {
             ttsService.stop()
         }
 
         val token = ++interactionToken
-
-        soundService.playMessageReceivedSound()
         vibrationService.vibrateStartListening()
 
         _state.update {
             it.copy(
                 mode = AssistantMode.ACTIVE_LISTENING,
-                feedbackMessage = "Te escucho... Di tu orden"
+                feedbackMessage = "Habla después del tono..."
             )
         }
 
@@ -149,7 +158,7 @@ class VoiceAssistantManager(
                 _state.update {
                     it.copy(
                         mode = AssistantMode.ACTIVE_LISTENING,
-                        feedbackMessage = "Te escucho... Di tu orden"
+                        feedbackMessage = "Escuchando tu voz..."
                     )
                 }
             },
@@ -158,22 +167,18 @@ class VoiceAssistantManager(
                 _state.update { it.copy(lastRecognizedText = recognizedText) }
                 processCommandPhrase(recognizedText, token)
             },
-            onError = { errorMsg ->
+            onError = { _ ->
                 if (token != interactionToken || isDestroyed) return@startListening
-                Log.w(TAG, "Error de captura: $errorMsg")
                 vibrationService.vibrateError()
                 resetToStandby(clearDialogue = true)
-                // El usuario invidente no ve la pantalla: el error debe oírse, no solo vibrar.
-                ttsService.speak(errorMsg)
-            }
+                ttsService.speak(
+                    "No logré escucharte bien. Pulsa el botón del asistente de voz para volver a intentar, y habla después del tono."
+                )
+            },
+            playPromptTone = true
         )
     }
 
-    fun triggerExplicitActivation() = activateAssistant()
-
-    /**
-     * Procesa la orden del usuario enviándola a Gemini.
-     */
     private fun processCommandPhrase(rawText: String, token: Long) {
         val cleanCommand = cleanWakePrefixes(rawText)
         if (cleanCommand.isBlank()) {
@@ -187,98 +192,127 @@ class VoiceAssistantManager(
         _state.update {
             it.copy(
                 mode = AssistantMode.PROCESSING,
-                feedbackMessage = "Consultando con Inteligencia Artificial..."
+                feedbackMessage = "Procesando tu solicitud..."
             )
         }
 
         processingJob?.cancel()
         processingJob = scope.launch {
-            val contactsList = chatRepository.contacts.value.map { it.name }
-            val activeChat = getActiveChatContact()
-            val recentMessages = chatRepository.messages.value.takeLast(4).map { "${it.senderName}: ${it.text}" }
+            val currentTimeText = formatCurrentDateTimeForVoice()
+            val weatherText = fetchWeatherSummary()
 
-            val assistantContext = VoiceAssistantContext(
-                currentScreen = getCurrentScreen(),
-                currentUserName = getCurrentUser(),
-                contacts = contactsList,
-                activeChatContact = activeChat?.name,
-                recentMessages = recentMessages
+            // Atajo instantáneo y preciso para preguntas comunes de la vida diaria
+            val localCommonReply = tryHandleCommonQuestionLocally(
+                query = cleanCommand,
+                currentTimeText = currentTimeText,
+                weatherText = weatherText
             )
 
-            // Se envía una COPIA del historial: la consulta corre en Dispatchers.IO y la lista original
-            // puede modificarse en el hilo principal (stopAssistant), provocando ConcurrentModificationException.
-            val historySnapshot = dialogueHistory.toList()
-
-            val result = try {
-                withTimeoutOrNull(AI_TIMEOUT_MS) {
-                    GeminiDirectClient.processVoiceCommand(
-                        spokenText = cleanCommand,
-                        context = assistantContext,
-                        dialogueHistory = historySnapshot
-                    )
+            val result = if (localCommonReply != null) {
+                localCommonReply
+            } else {
+                val contactsList = chatRepository.contacts.value.map {
+                    if (it.username.isNotBlank()) "${it.name} (@${it.username})" else it.name
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e(TAG, "Fallo consultando a la IA", e)
-                null
-            } ?: VoiceCommandResult(
-                action = "GENERAL_REPLY",
-                spokenResponse = "No pude conectarme con el asistente en este momento. Revisa tu conexión a internet e inténtalo de nuevo."
-            )
+                val activeChat = getActiveChatContact()
+                val recentMessages = chatRepository.messages.value.takeLast(4).map { it.text }
 
-            // El usuario canceló o reactivó el asistente mientras se consultaba la IA
+                val assistantContext = VoiceAssistantContext(
+                    currentScreen = getCurrentScreen(),
+                    currentUserName = getCurrentUser(),
+                    currentUsername = getCurrentUsername(),
+                    currentTime = currentTimeText,
+                    currentWeather = weatherText,
+                    contacts = contactsList,
+                    activeChatContact = activeChat?.name,
+                    recentMessages = recentMessages
+                )
+
+                val historySnapshot = dialogueHistory.toList()
+
+                try {
+                    withTimeoutOrNull(AI_TIMEOUT_MS) {
+                        GeminiDirectClient.processVoiceCommand(
+                            spokenText = cleanCommand,
+                            context = assistantContext,
+                            dialogueHistory = historySnapshot
+                        )
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e(TAG, "Fallo consultando a la IA", e)
+                    null
+                } ?: VoiceCommandResult(
+                    action = "GENERAL_REPLY",
+                    spokenResponse = "No pude conectarme con la inteligencia artificial. Revisa tu conexión e inténtalo de nuevo."
+                )
+            }
+
             if (token != interactionToken || isDestroyed) return@launch
 
-            val spokenResponse = result.spokenResponse.ifBlank { "Entendido." }
+            val rawSpoken = result.spokenResponse.ifBlank { "Entendido." }
 
             _state.update {
                 it.copy(
                     mode = AssistantMode.SPEAKING,
-                    feedbackMessage = spokenResponse
+                    feedbackMessage = rawSpoken
                 )
             }
 
-            // Ejecutar la mutación de estado o navegación. Un fallo aquí no debe dejar el asistente colgado.
+            // Si la acción toma el micrófono directo (ej: grabar nota de voz), no reabrir STT después
+            val handsOverMicToVoiceNote = (result.action == "SEND_VOICE_NOTE" && getActiveChatContact() != null)
+
             try {
                 executeAction(result)
             } catch (e: Exception) {
                 Log.e(TAG, "Error ejecutando la acción ${result.action}", e)
             }
 
-            val isQuestion = spokenResponse.contains("?") ||
-                    spokenResponse.contains("¿") ||
-                    (result.action == "ADD_CONTACT" && (result.contactName.isNullOrBlank() && result.targetContact.isNullOrBlank())) ||
+            if (handsOverMicToVoiceNote) {
+                resetToStandby(clearDialogue = true)
+                return@launch
+            }
+
+            val isQuestion = !rawSpoken.contains("Para hablar nuevamente", ignoreCase = true) && (
+                rawSpoken.trim().endsWith("?") ||
+                    rawSpoken.contains("¿") ||
+                    (result.action == "ADD_CONTACT" && result.contactName.isNullOrBlank() && result.targetContact.isNullOrBlank()) ||
                     (result.action == "SEND_MESSAGE" && result.messageText.isNullOrBlank())
+                )
+
+            val speechToSpeak = if (isQuestion) {
+                if (rawSpoken.contains("después del tono", ignoreCase = true)) rawSpoken
+                else "$rawSpoken Habla después del tono."
+            } else {
+                if (rawSpoken.contains("pulsa el botón", ignoreCase = true)) rawSpoken
+                else "$rawSpoken Para hablar nuevamente, pulsa el botón del asistente de voz."
+            }
 
             mainHandler.removeCallbacks(speakingWatchdog)
             mainHandler.postDelayed(
                 speakingWatchdog,
-                SPEAKING_WATCHDOG_BASE_MS + spokenResponse.length * SPEAKING_WATCHDOG_PER_CHAR_MS
+                SPEAKING_WATCHDOG_BASE_MS + speechToSpeak.length * SPEAKING_WATCHDOG_PER_CHAR_MS
             )
 
-            // Narrar la respuesta por voz al usuario
             ttsService.speak(
-                spokenResponse,
+                speechToSpeak,
                 onDone = {
                     mainHandler.removeCallbacks(speakingWatchdog)
                     if (token != interactionToken || isDestroyed) return@speak
                     if (isQuestion) {
-                        // Guardar en el historial de la conversación el turno para recordar la pregunta
-                        dialogueHistory.add(cleanCommand to spokenResponse)
+                        dialogueHistory.add(cleanCommand to rawSpoken)
                         if (dialogueHistory.size > 6) {
                             dialogueHistory.removeAt(0)
                         }
-                        // Esperar 800ms a que el hardware libere el audio y reactivar el micrófono para la respuesta del usuario
+                        // Esperar 550ms para que TTS libere el audio antes del tono y micrófono
                         mainHandler.removeCallbacks(reactivateRunnable)
-                        mainHandler.postDelayed(reactivateRunnable, 800)
+                        mainHandler.postDelayed(reactivateRunnable, 550L)
                     } else {
                         resetToStandby(clearDialogue = true)
                     }
                 },
                 onInterrupted = {
-                    // Otra locución (p. ej. exploración táctil) interrumpió la respuesta:
-                    // no reabrir el micrófono, pero tampoco quedarse en SPEAKING.
                     mainHandler.removeCallbacks(speakingWatchdog)
                     if (token != interactionToken || isDestroyed) return@speak
                     if (_state.value.mode == AssistantMode.SPEAKING) {
@@ -289,9 +323,83 @@ class VoiceAssistantManager(
         }
     }
 
-    /**
-     * Limpia prefijos como "Ok asistente" si el usuario los incluyó al hablar.
-     */
+    private fun tryHandleCommonQuestionLocally(
+        query: String,
+        currentTimeText: String,
+        weatherText: String
+    ): VoiceCommandResult? {
+        val q = query.lowercase(Locale.getDefault())
+            .replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+
+        if (q.contains("que hora") || q.contains("la hora") || q.contains("que dia es") || q.contains("fecha de hoy")) {
+            return VoiceCommandResult(
+                action = "GENERAL_REPLY",
+                spokenResponse = "Actualmente son $currentTimeText."
+            )
+        }
+
+        if (q.contains("cuantos grados") || q.contains("temperatura") || q.contains("clima") || q.contains("hace frio") || q.contains("hace calor")) {
+            return VoiceCommandResult(
+                action = "GENERAL_REPLY",
+                spokenResponse = weatherText
+            )
+        }
+
+        if (q.contains("nombre de usuario") || q.contains("mi usuario") || q.contains("como me llamo") || q.contains("quien soy") || q.contains("cual es mi cuenta")) {
+            val fullName = getCurrentUser().ifBlank { "Usuario" }
+            val handle = getCurrentUsername().ifBlank { fullName.lowercase().replace(" ", "_") }
+            return VoiceCommandResult(
+                action = "GENERAL_REPLY",
+                spokenResponse = "Tu nombre es $fullName y tu nombre de usuario único es arroba $handle."
+            )
+        }
+
+        return null
+    }
+
+    private fun formatCurrentDateTimeForVoice(): String {
+        val now = Date()
+        val timeFmt = SimpleDateFormat("h:mm a", Locale("es", "PE")).format(now)
+        val dateFmt = SimpleDateFormat("EEEE d 'de' MMMM", Locale("es", "PE")).format(now)
+        return "las $timeFmt del $dateFmt"
+    }
+
+    private suspend fun fetchWeatherSummary(): String = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val cached = cachedWeatherText
+        if (cached != null && now - cachedWeatherTimestamp < 15 * 60 * 1000L) {
+            return@withContext cached
+        }
+        val fetched = try {
+            val req = Request.Builder()
+                .url("https://api.open-meteo.com/v1/forecast?latitude=-12.0651&longitude=-75.2049&current_weather=true")
+                .build()
+            weatherHttpClient.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val body = resp.body?.string().orEmpty()
+                    val current = JSONObject(body).optJSONObject("current_weather")
+                    if (current != null && current.has("temperature")) {
+                        val temp = Math.round(current.getDouble("temperature")).toInt()
+                        "Actualmente estamos a $temp grados centígrados."
+                    } else null
+                } else null
+            }
+        } catch (_: Exception) {
+            null
+        }
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val approxTemp = when (hour) {
+            in 6..10 -> 14
+            in 11..16 -> 19
+            in 17..20 -> 15
+            else -> 11
+        }
+        val finalResult = fetched ?: "Estamos aproximadamente a $approxTemp grados centígrados."
+        cachedWeatherText = finalResult
+        cachedWeatherTimestamp = now
+        finalResult
+    }
+
     private fun cleanWakePrefixes(text: String): String {
         return text
             .replace("(?i)ok asistente".toRegex(), "")
@@ -304,17 +412,15 @@ class VoiceAssistantManager(
     }
 
     private fun findContact(target: String): Contact? {
-        val cleanTarget = target.trim()
+        val cleanTarget = target.trim().removePrefix("@")
         if (cleanTarget.isBlank()) return null
         return chatRepository.contacts.value.firstOrNull {
-            it.name.isNotBlank() &&
-                (it.name.contains(cleanTarget, ignoreCase = true) || cleanTarget.contains(it.name, ignoreCase = true))
+            (it.name.isNotBlank() &&
+                (it.name.contains(cleanTarget, ignoreCase = true) || cleanTarget.contains(it.name, ignoreCase = true))) ||
+                (it.username.isNotBlank() && it.username.equals(cleanTarget, ignoreCase = true))
         }
     }
 
-    /**
-     * Ejecuta las mutaciones de estado y navegación solicitadas por Gemini.
-     */
     private fun executeAction(result: VoiceCommandResult) {
         when (result.action) {
             "OPEN_CHAT" -> {
@@ -335,7 +441,6 @@ class VoiceAssistantManager(
                     pendingAction = null
                     scope.launch {
                         if (currentUserId.isNotBlank()) {
-                            // 1. Intentar resolver si el nombre dictado coincide con algún usuario del sistema
                             var targetUsername = clean
                             try {
                                 val usersResp = RetrofitClient.api.getUsers()
@@ -346,7 +451,7 @@ class VoiceAssistantManager(
                                         val uName = (u.name ?: "").lowercase().trim()
                                         val uUser = (u.username ?: "").lowercase().trim()
                                         uUser == cleanLower || uName == cleanLower ||
-                                        (uName.isNotBlank() && (uName.contains(cleanLower) || cleanLower.contains(uName)))
+                                            (uName.isNotBlank() && (uName.contains(cleanLower) || cleanLower.contains(uName)))
                                     }
                                     if (matched != null && !matched.username.isNullOrBlank()) {
                                         targetUsername = matched.username
@@ -360,10 +465,14 @@ class VoiceAssistantManager(
                             addResult.fold(
                                 onSuccess = { added ->
                                     val displayName = if (added.name.isNotBlank()) added.name else "@${added.username}"
-                                    ttsService.speak("Contacto $displayName agregado exitosamente a tu lista.")
+                                    ttsService.speak(
+                                        "Contacto $displayName agregado exitosamente. Para hablar nuevamente, pulsa el botón del asistente de voz."
+                                    )
                                 },
-                                onFailure = { error ->
-                                    ttsService.speak("No encontré a ningún usuario registrado con el nombre o usuario $clean. Pídele su nombre de usuario de Messenger para agregarlo.")
+                                onFailure = { _ ->
+                                    ttsService.speak(
+                                        "No encontré a ningún usuario registrado con el nombre $clean. Para hablar nuevamente, pulsa el botón del asistente de voz."
+                                    )
                                 }
                             )
                         } else {
@@ -371,7 +480,6 @@ class VoiceAssistantManager(
                         }
                     }
                 } else {
-                    // Cuando aún no hay nombre (la IA está preguntándolo), no crear ningún contacto falso
                     pendingAction = "ADD_CONTACT"
                 }
             }
@@ -379,8 +487,7 @@ class VoiceAssistantManager(
             "DELETE_CONTACT" -> {
                 val target = result.targetContact ?: result.contactName ?: ""
                 if (target.isNotBlank()) {
-                    val deleted = chatRepository.deleteContact(target)
-                    Log.i(TAG, "Contacto eliminado: ${deleted?.name}")
+                    chatRepository.deleteContact(target)
                 }
             }
 
@@ -393,19 +500,19 @@ class VoiceAssistantManager(
             }
 
             "SEND_MESSAGE" -> {
-                val text = result.messageText
-                if (!text.isNullOrBlank()) {
+                val rawText = result.messageText
+                if (!rawText.isNullOrBlank()) {
+                    val polishedText = IntonationPunctuationPolisher.polish(rawText)
                     val target = result.targetContact
                     val targetContact = if (!target.isNullOrBlank()) findContact(target) else null
                     if (targetContact != null) {
                         onOpenChat?.invoke(targetContact)
                     }
-                    // Antes el mensaje solo se agregaba a la lista local y NUNCA llegaba al servidor.
                     val recipient = targetContact ?: getActiveChatContact()
                     val userId = getCurrentUserId()
                     if (recipient != null && recipient.id.isNotBlank() && userId.isNotBlank()) {
                         scope.launch {
-                            val sendResult = chatRepository.sendMessageRemote(userId, recipient.id, text)
+                            val sendResult = chatRepository.sendMessageRemote(userId, recipient.id, polishedText)
                             if (sendResult.isFailure) {
                                 ttsService.speak(
                                     "Atención: el mensaje para ${recipient.name} no se pudo enviar por falta de conexión. Quedó guardado en el teléfono.",
@@ -414,9 +521,25 @@ class VoiceAssistantManager(
                             }
                         }
                     } else {
-                        chatRepository.sendMessage(text)
+                        chatRepository.sendMessage(polishedText)
                     }
                 }
+            }
+
+            "SEND_VOICE_NOTE" -> {
+                onStartVoiceNote?.invoke()
+            }
+
+            "SUMMARIZE_MESSAGES" -> {
+                onSummarizeLastMessage?.invoke()
+            }
+
+            "START_CALL" -> {
+                val target = result.targetContact
+                if (!target.isNullOrBlank()) {
+                    findContact(target)?.let { onOpenChat?.invoke(it) }
+                }
+                onStartCall?.invoke()
             }
 
             "BACK" -> {
@@ -443,7 +566,6 @@ class VoiceAssistantManager(
     }
 
     fun stopAssistant() {
-        // Invalidar callbacks tardíos (reconocimiento, IA o TTS) de la interacción en curso
         interactionToken++
         mainHandler.removeCallbacks(reactivateRunnable)
         mainHandler.removeCallbacks(speakingWatchdog)

@@ -115,12 +115,16 @@ fun SmartReplyCard(
 fun MessageBubble(
     message: Message,
     onSpeakMessage: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isPlayingVoiceNote: Boolean = false
 ) {
     val isSent = message.isOutgoing
     val bubbleColor = if (isSent) MessageSentBubble else MessageReceivedBubble
-    val timeFormatted = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.timestamp))
-    val semanticDescription = "${if (isSent) "Mensaje que enviaste" else "Mensaje recibido de ${message.senderName}"} a las $timeFormatted: ${message.text}. Toque dos veces para volver a escuchar."
+    val timeFormatted = if (message.formattedTime.isNotBlank()) {
+        message.formattedTime
+    } else {
+        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.timestamp))
+    }
 
     Card(
         shape = RoundedCornerShape(14.dp),
@@ -131,18 +135,23 @@ fun MessageBubble(
             .padding(vertical = 4.dp)
             .clickable { onSpeakMessage(message.text) }
             .semantics {
-                this.contentDescription = semanticDescription
+                // Solo decir el mensaje tal cual al explorar (sin anteponer nombre ni prefijos)
+                this.contentDescription = message.text
             }
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Text(
-                text = "${message.senderName} • $timeFormatted",
+                text = timeFormatted,
                 color = if (isSent) HighContrastYellow else TextSecondary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
             )
             Text(
-                text = message.text,
+                text = if (message.isVoiceNote && isPlayingVoiceNote) {
+                    "▶ Reproduciendo: ${message.text}"
+                } else {
+                    message.text
+                },
                 color = TextPrimary,
                 fontSize = 18.sp,
                 modifier = Modifier.padding(top = 4.dp)

@@ -87,7 +87,7 @@ class AuthViewModel(
         ttsService.stop()
         _voiceAuthState.value = VoiceAuthState(
             phase = VoiceAuthPhase.LISTENING_NAME,
-            feedbackMessage = "Diga el nombre de su cuenta para iniciar"
+            feedbackMessage = "Habla después del tono y di el nombre de tu cuenta"
         )
         speechService.startListening(
             onReady = {},
@@ -95,7 +95,7 @@ class AuthViewModel(
                 processVoiceAccountName(recognizedName)
             },
             onError = { error ->
-                triggerVoiceError("No se pudo reconocer el nombre. Por favor, intente nuevamente.")
+                triggerVoiceError("No se escuchó tu voz. Pulsa el botón de voz en el centro de la pantalla para intentar nuevamente, y habla después del tono.")
             }
         )
     }
@@ -140,10 +140,14 @@ class AuthViewModel(
                             // Ignorar registros incompletos: un nombre vacío coincidía con CUALQUIER frase
                             // (cadena.contains("") == true) y se seleccionaba una cuenta equivocada.
                             val uName = u?.name?.trim()?.lowercase().orEmpty()
-                            if (u?.id.isNullOrBlank() || uName.isBlank()) return@firstOrNull false
-                            uName.contains(clean) || clean.contains(uName) ||
-                            clean.replace(" ", "").contains(uName.replace(" ", "")) ||
-                            uName.replace(" ", "").contains(clean.replace(" ", ""))
+                            val uHandle = u?.username?.trim()?.lowercase().orEmpty()
+                            if (u?.id.isNullOrBlank() || (uName.isBlank() && uHandle.isBlank())) return@firstOrNull false
+                            (uHandle.isNotBlank() && (uHandle == clean.removePrefix("@") || clean.replace(" ", "") == uHandle)) ||
+                            (uName.isNotBlank() && (
+                                uName.contains(clean) || clean.contains(uName) ||
+                                clean.replace(" ", "").contains(uName.replace(" ", "")) ||
+                                uName.replace(" ", "").contains(clean.replace(" ", ""))
+                            ))
                         }
                         val matchId = match?.id
                         val matchName = match?.name
@@ -172,10 +176,10 @@ class AuthViewModel(
                     throw e
                 } catch (e: Exception) {
                     Log.w("AuthViewModel", "No se pudo consultar usuarios remotos: ${e.message}")
-                    triggerVoiceError("No hay conexión con el servidor para buscar la cuenta \"$recognizedName\". Verifique su internet e intente nuevamente.")
+                    triggerVoiceError("No hay conexión con el servidor para buscar la cuenta \"$recognizedName\". Pulsa el botón de voz en el centro para intentar nuevamente, y habla después del tono.")
                     return@launch
                 }
-                triggerVoiceError("No se encontró ninguna cuenta asociada a: \"$recognizedName\".")
+                triggerVoiceError("No encontré ninguna cuenta asociada a \"$recognizedName\". Pulsa el botón de voz en el centro para activar el micrófono nuevamente, y habla después del tono.")
             }
         }
     }
@@ -353,7 +357,46 @@ class AuthViewModel(
 
     companion object {
         private val EMAIL_REGEX = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
-        const val MIN_PASSWORD_LENGTH = 6
+        const val MIN_PASSWORD_LENGTH = 8
+
+        data class PasswordStrengthInfo(
+            val score: Float,
+            val label: String,
+            val hasMinLength: Boolean,
+            val hasUppercase: Boolean,
+            val hasNumber: Boolean,
+            val hasSpecialChar: Boolean
+        )
+
+        fun calculatePasswordStrength(password: String): PasswordStrengthInfo {
+            val trimmed = password.trim()
+            val hasMinLength = trimmed.length >= MIN_PASSWORD_LENGTH
+            val hasUppercase = password.any { it.isUpperCase() }
+            val hasNumber = password.any { it.isDigit() }
+            val hasSpecial = password.any { !it.isLetterOrDigit() && !it.isWhitespace() }
+
+            val passedCount = listOf(hasMinLength, hasUppercase, hasNumber, hasSpecial).count { it }
+            val bonus = if (password.length >= 12) 0.1f else 0f
+            val score = if (password.isEmpty()) 0f else ((passedCount / 4.0f) + bonus).coerceIn(0.15f, 1.0f)
+
+            val label = when {
+                password.isEmpty() -> "Sin contraseña"
+                passedCount <= 1 -> "Muy débil"
+                passedCount == 2 -> "Débil"
+                passedCount == 3 -> "Media"
+                passedCount == 4 && password.length >= 10 -> "Muy segura"
+                else -> "Fuerte"
+            }
+
+            return PasswordStrengthInfo(
+                score = score,
+                label = label,
+                hasMinLength = hasMinLength,
+                hasUppercase = hasUppercase,
+                hasNumber = hasNumber,
+                hasSpecialChar = hasSpecial
+            )
+        }
 
         /** Devuelve un mensaje de error en español, o null si el correo es válido. */
         fun validateEmail(email: String): String? = when {
@@ -362,11 +405,32 @@ class AuthViewModel(
             else -> null
         }
 
-        /** Devuelve un mensaje de error en español, o null si la contraseña es válida. */
-        fun validatePassword(password: String): String? = when {
-            password.isBlank() -> "Ingresa una contraseña (no solo espacios)."
-            password.length < MIN_PASSWORD_LENGTH -> "La contraseña debe tener al menos $MIN_PASSWORD_LENGTH caracteres."
-            else -> null
+        /** Devuelve un mensaje de error en español, o null si la contraseña cumple los requisitos de seguridad. */
+        fun validatePassword(password: String): String? {
+            if (password.isBlank()) return "Ingresa una contraseña (no solo espacios)."
+            val info = calculatePasswordStrength(password)
+            return when {
+                !info.hasMinLength -> "La contraseña debe tener al menos $MIN_PASSWORD_LENGTH caracteres."
+                !info.hasUppercase -> "Agrega al menos una letra mayúscula."
+                !info.hasNumber -> "Agrega al menos un número."
+                !info.hasSpecialChar -> "Agrega al menos un carácter especial (@, *, #, $, etc.)."
+                else -> null
+            }
+        }
+
+        /** Valida que el número telefónico tenga solo dígitos y la longitud exacta del país seleccionado. */
+        fun validatePhoneForCountry(
+            phoneDigits: String,
+            country: com.example.mensajeria.data.model.CountryPhoneInfo
+        ): String? {
+            val clean = phoneDigits.trim()
+            return when {
+                clean.isBlank() -> "Ingresa tu número de celular."
+                !clean.all { it.isDigit() } -> "Solo se permiten números en el celular."
+                clean.length != country.maxDigits ->
+                    "En ${country.name} (${country.dialCode}) el número debe tener ${country.maxDigits} dígitos."
+                else -> null
+            }
         }
 
         /** Devuelve un mensaje de error en español, o null si el nombre de usuario es válido. */
