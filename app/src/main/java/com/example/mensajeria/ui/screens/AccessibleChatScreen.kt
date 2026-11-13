@@ -86,7 +86,11 @@ fun AccessibleChatScreen(
 
     val connectionStatus = remember(contact.id, contact.isOnline, contact.lastSeenTime, uiState.contact) {
         val activeContact = if (uiState.contact.id == contact.id) uiState.contact else contact
-        activeContact.getConnectionStatusText()
+        try {
+            activeContact.getConnectionStatusText()
+        } catch (_: Exception) {
+            "Conectado"
+        }
     }
     val isContactOnline = (if (uiState.contact.id == contact.id) uiState.contact.isOnline else contact.isOnline)
 

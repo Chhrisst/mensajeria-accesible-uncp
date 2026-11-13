@@ -26,16 +26,16 @@ data class Contact(
     val username: String = "",
     val description: String = "",
     val isOnline: Boolean = false,
-    val lastSeenTime: String = ""
+    val lastSeenTime: String? = ""
 ) {
     fun getLastSeenDisplay(): String {
-        val raw = lastSeenTime.trim()
+        val raw = lastSeenTime?.trim().orEmpty()
         if (Regex("^\\d{1,2}:\\d{2}$").matches(raw)) {
             return raw
         }
-        // Si no hay hora explícita del servidor, derivar una hora reciente estable del día
+        val safeId = id.ifBlank { name }
         val cal = java.util.Calendar.getInstance()
-        val seed = (id.hashCode() and 0x7FFFFFFF) % 45 + 3
+        val seed = (safeId.hashCode() and 0x7FFFFFFF) % 45 + 3
         cal.add(java.util.Calendar.MINUTE, -seed)
         return String.format(
             java.util.Locale.getDefault(),

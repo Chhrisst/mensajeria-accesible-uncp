@@ -94,19 +94,22 @@ class ChatRepository(private val context: Context? = null) {
         val id = (raw.id as String?)?.takeIf { it.isNotBlank() } ?: return null
         val username = (raw.username as String?) ?: ""
         val name = (raw.name as String?)?.takeIf { it.isNotBlank() } ?: username.ifBlank { return null }
+        val rawTime = (raw.lastSeenTime as String?) ?: ""
         return Contact(
             id = id,
             name = name,
             username = username,
             description = (raw.description as String?) ?: "",
             isOnline = raw.isOnline,
-            lastSeenTime = (raw.lastSeenTime as String?) ?: ""
+            lastSeenTime = rawTime
         )
     }
 
     private fun sanitizeMessage(raw: Message?): Message? {
         if (raw == null) return null
         val id = (raw.id as String?)?.takeIf { it.isNotBlank() } ?: return null
+        val rawAudio = (raw.audioBase64 as String?) ?: ""
+        val rawTime = (raw.formattedTime as String?) ?: ""
         return Message(
             id = id,
             text = (raw.text as String?) ?: "",
@@ -115,8 +118,8 @@ class ChatRepository(private val context: Context? = null) {
             senderName = (raw.senderName as String?) ?: if (raw.isOutgoing) "Tú" else "Contacto",
             isVoiceNote = raw.isVoiceNote,
             voiceDurationSeconds = raw.voiceDurationSeconds,
-            audioBase64 = (raw.audioBase64 as String?) ?: "",
-            formattedTime = (raw.formattedTime as String?) ?: ""
+            audioBase64 = rawAudio,
+            formattedTime = rawTime
         )
     }
 
@@ -389,12 +392,13 @@ class ChatRepository(private val context: Context? = null) {
                 }
                 // Actualizar hora de última conexión del contacto según su último mensaje recibido
                 val lastIncoming = mapped.lastOrNull { !it.isOutgoing }
-                if (lastIncoming != null && lastIncoming.formattedTime.isNotBlank()) {
-                    val isNowOnline = isTimeWithinMinutes(lastIncoming.formattedTime, 5)
+                val incomingTime = lastIncoming?.formattedTime.orEmpty()
+                if (incomingTime.isNotBlank()) {
+                    val isNowOnline = isTimeWithinMinutes(incomingTime, 5)
                     _contacts.update { list ->
                         list.map { c ->
                             if (c.id == contactId) {
-                                c.copy(isOnline = c.isOnline || isNowOnline, lastSeenTime = lastIncoming.formattedTime)
+                                c.copy(isOnline = c.isOnline || isNowOnline, lastSeenTime = incomingTime)
                             } else c
                         }
                     }
