@@ -401,10 +401,45 @@ class VoiceAssistantManager(
         }
         if (currentPending == "ADD_CONTACT") {
             pendingAction = null
+            val cleanUsername = trimmed
+                .replace(Regex("(?i)^(?:su\\s+usuario\\s+es|el\\s+usuario\\s+es|es\\s+el\\s+usuario|es|al\\s+usuario|el\\s+usuario|usuario|arroba)\\s+"), "")
+                .replace("@", "")
+                .replace(" ", "")
+                .lowercase()
             return VoiceCommandResult(
                 action = "ADD_CONTACT",
-                contactName = trimmed,
-                spokenResponse = "Buscando a $trimmed para agregarlo."
+                contactName = cleanUsername,
+                spokenResponse = "Buscando al usuario arroba $cleanUsername para agregarlo."
+            )
+        }
+
+        // Agregar contacto por nombre de usuario (flujo directo o conversacional multi-turno)
+        val directAddUser = extractDirectUsernameFromAddCommand(trimmed)
+        if (!directAddUser.isNullOrBlank()) {
+            val cleanUser = directAddUser.removePrefix("@").replace(" ", "").lowercase()
+            return VoiceCommandResult(
+                action = "ADD_CONTACT",
+                contactName = cleanUser,
+                spokenResponse = "Buscando al usuario arroba $cleanUser para agregarlo."
+            )
+        }
+
+        val isAddContactIntent = lower in setOf(
+            "agrega un contacto", "agregar un contacto", "quiero agregar un contacto",
+            "agrega contacto", "agregar contacto", "anadir contacto", "añadir contacto", "nuevo contacto",
+            "agrega un usuario", "agregar un usuario", "agregar usuario", "agrega usuario", "nuevo usuario",
+            "anadir un contacto", "añadir un contacto", "quiero agregar a alguien", "agregar a alguien",
+            "agrega a alguien", "agregar", "agrega"
+        ) || (lower.startsWith("agrega un contacto") || lower.startsWith("agregar un contacto") ||
+              lower.startsWith("quiero agregar un contacto") || lower.startsWith("anadir contacto") ||
+              lower.startsWith("añadir contacto"))
+
+        if (isAddContactIntent) {
+            pendingAction = "ADD_CONTACT"
+            return VoiceCommandResult(
+                action = "ADD_CONTACT",
+                contactName = null,
+                spokenResponse = "¿Cuál es el nombre de usuario del contacto que deseas agregar?"
             )
         }
 
@@ -530,13 +565,36 @@ class VoiceAssistantManager(
             .ifBlank { text.trim() }
     }
 
+    private fun extractDirectUsernameFromAddCommand(text: String): String? {
+        val trimmed = text.trim()
+        val patterns = listOf(
+            Regex("(?i)^(?:agrega|agregar|anadir|añadir)\\s+(?:al\\s+usuario|el\\s+usuario|a\\s+usuario|usuario)\\s+[@]?([a-zA-Z0-9_]+)$"),
+            Regex("(?i)^(?:agrega|agregar|anadir|añadir)\\s+(?:un\\s+contacto|el\\s+contacto|a\\s+un\\s+contacto|contacto)\\s+(?:con\\s+usuario\\s+|con\\s+el\\s+usuario\\s+)?(?:al\\s+usuario\\s+)?(?:arroba\\s+)?[@]?([a-zA-Z0-9_]+)$"),
+            Regex("(?i)^(?:agrega|agregar|anadir|añadir)\\s+a\\s+[@]?([a-zA-Z0-9_]+)$"),
+            Regex("(?i)^(?:agrega|agregar|anadir|añadir)\\s+[@]([a-zA-Z0-9_]+)$")
+        )
+        for (pattern in patterns) {
+            val match = pattern.matchEntire(trimmed)
+            val extracted = match?.groupValues?.getOrNull(1)?.trim()
+            if (!extracted.isNullOrBlank()) {
+                val lower = extracted.lowercase()
+                if (lower !in setOf("contacto", "un", "el", "usuario", "alguien", "amigo", "nueva", "nuevo")) {
+                    return extracted
+                }
+            }
+        }
+        return null
+    }
+
     private fun findContact(target: String): Contact? {
         val cleanTarget = target.trim().removePrefix("@")
         if (cleanTarget.isBlank()) return null
-        return chatRepository.contacts.value.firstOrNull {
-            (it.name.isNotBlank() &&
-                (it.name.contains(cleanTarget, ignoreCase = true) || cleanTarget.contains(it.name, ignoreCase = true))) ||
-                (it.username.isNotBlank() && it.username.equals(cleanTarget, ignoreCase = true))
+        val currentContacts = chatRepository.contacts.value
+        return currentContacts.firstOrNull {
+            it.username.isNotBlank() && it.username.equals(cleanTarget, ignoreCase = true)
+        } ?: currentContacts.firstOrNull {
+            it.name.isNotBlank() &&
+                (it.name.contains(cleanTarget, ignoreCase = true) || cleanTarget.contains(it.name, ignoreCase = true))
         }
     }
 
@@ -554,7 +612,11 @@ class VoiceAssistantManager(
 
             "ADD_CONTACT" -> {
                 val identifier = result.contactName ?: result.targetContact ?: ""
-                val clean = identifier.trim().removePrefix("@")
+                val clean = identifier.trim()
+                    .replace(Regex("(?i)^(?:su\\s+usuario\\s+es|el\\s+usuario\\s+es|es\\s+el\\s+usuario|es|al\\s+usuario|el\\s+usuario|usuario|arroba)\\s+"), "")
+                    .removePrefix("@")
+                    .replace(" ", "")
+                    .lowercase()
                 val currentUserId = getCurrentUserId()
                 if (clean.isNotBlank()) {
                     pendingAction = null
@@ -566,11 +628,9 @@ class VoiceAssistantManager(
                                 val usersList: List<ApiUserResponse>? = usersResp.body()
                                 if (usersResp.isSuccessful && !usersList.isNullOrEmpty()) {
                                     val cleanLower = clean.lowercase().trim()
+                                    // Búsqueda estricta por nombre de usuario único (@usuario o nickname)
                                     val matched = usersList.firstOrNull { u ->
-                                        val uName = (u.name ?: "").lowercase().trim()
-                                        val uUser = (u.username ?: "").lowercase().trim()
-                                        uUser == cleanLower || uName == cleanLower ||
-                                            (uName.isNotBlank() && (uName.contains(cleanLower) || cleanLower.contains(uName)))
+                                        (u.username ?: "").lowercase().trim() == cleanLower
                                     }
                                     if (matched != null && !matched.username.isNullOrBlank()) {
                                         targetUsername = matched.username
@@ -583,14 +643,18 @@ class VoiceAssistantManager(
                             val addResult = chatRepository.addContactByUsername(currentUserId, targetUsername)
                             addResult.fold(
                                 onSuccess = { added ->
-                                    val displayName = if (added.name.isNotBlank()) added.name else "@${added.username}"
+                                    val displayName = if (added.name.isNotBlank() && !added.name.equals(added.username, ignoreCase = true)) {
+                                        "${added.name} con usuario arroba ${added.username}"
+                                    } else {
+                                        "arroba ${added.username}"
+                                    }
                                     ttsService.speak(
                                         "Contacto $displayName agregado exitosamente. Para hablar nuevamente, pulsa el botón del asistente de voz."
                                     )
                                 },
                                 onFailure = { _ ->
                                     ttsService.speak(
-                                        "No encontré a ningún usuario registrado con el nombre $clean. Para hablar nuevamente, pulsa el botón del asistente de voz."
+                                        "No encontré a ningún usuario registrado con el usuario arroba $clean. Para hablar nuevamente, pulsa el botón del asistente de voz."
                                     )
                                 }
                             )

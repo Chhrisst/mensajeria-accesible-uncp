@@ -104,12 +104,14 @@ object GeminiDirectClient {
             4. Si pide enviar una nota de voz o audio ("envía una nota de voz", "graba un audio"), usa "action": "SEND_VOICE_NOTE".
             5. Si pide resumir el último mensaje ("resume el mensaje", "resumen"), usa "action": "SUMMARIZE_MESSAGES".
             6. Si pide llamar ("llama a...", "hacer una llamada"), usa "action": "START_CALL".
+            7. Si el usuario pide agregar un contacto (ej: "agrega un contacto", "quiero agregar un contacto", "agregar contacto"), NUNCA preguntes por el nombre personal de la persona. Pregunta SIEMPRE por su nombre de usuario único (@usuario o nickname) diciendo exactamente: "¿Cuál es el nombre de usuario del contacto que deseas agregar?" usando "action": "ADD_CONTACT" y "contactName": null.
+            8. Si el usuario indica o dicta el nombre de usuario para agregar (ej: "juan123", "@juan123", "agrega a juan123"), usa "action": "ADD_CONTACT", coloca el nombre de usuario en "contactName" (en minúsculas, sin espacios ni arroba), y en "spokenResponse" di: "Buscando al usuario arroba [usuario] para agregarlo."
 
             Analiza la intención del usuario y responde ÚNICAMENTE un objeto JSON válido con este formato:
             {
               "action": "OPEN_CHAT" | "LIST_CONTACTS" | "ADD_CONTACT" | "DELETE_CONTACT" | "MODIFY_CONTACT" | "SEND_MESSAGE" | "SEND_VOICE_NOTE" | "READ_MESSAGES" | "SUMMARIZE_MESSAGES" | "START_CALL" | "LOGOUT" | "BACK" | "HELP" | "GENERAL_REPLY",
               "targetContact": "Nombre exacto o más cercano de la lista si aplica, o null",
-              "contactName": "Nombre o identificador único (@usuario) si se pide agregar o renombrar un contacto, o null",
+              "contactName": "Nombre de usuario único (@usuario o nickname) en minúsculas si se pide agregar o renombrar un contacto, o null",
               "contactPhone": "Número telefónico si se dictó al agregar, o null",
               "messageText": "Mensaje bien puntuado con signos de interrogación, exclamación, comas y tildes si aplica, o null",
               "spokenResponse": "Respuesta conversacional breve, cálida, sin tecnicismos ni formato markdown, lista para ser leída por voz al usuario ciego."

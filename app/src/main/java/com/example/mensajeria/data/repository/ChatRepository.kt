@@ -303,12 +303,17 @@ class ChatRepository(private val context: Context? = null) {
             )
             val newContact = if (response.isSuccessful) mapApiContact(response.body()) else null
             if (newContact != null) {
+                val contactWithUsername = if (newContact.username.isBlank()) {
+                    newContact.copy(username = clean)
+                } else {
+                    newContact
+                }
                 _contacts.update { current ->
-                    val filtered = current.filter { it.id != newContact.id && !it.id.startsWith("c_") }
-                    listOf(newContact) + filtered
+                    val filtered = current.filter { it.id != contactWithUsername.id && !it.id.startsWith("c_") }
+                    listOf(contactWithUsername) + filtered
                 }
                 persistContacts(userId)
-                Result.success(newContact)
+                Result.success(contactWithUsername)
             } else {
                 val rawError = response.errorBody()?.string() ?: ""
                 val cleanError = try {

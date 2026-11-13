@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -318,24 +319,39 @@ fun AccessibleContactListScreen(
                                 Spacer(modifier = Modifier.size(16.dp))
 
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = contact.name,
-                                        fontSize = 19.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isFocused) PureBlack else Color.White,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = contact.name,
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isFocused) PureBlack else Color.White,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        )
+                                        if (contact.username.isNotBlank()) {
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "@${contact.username}",
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (isFocused) PureBlack.copy(alpha = 0.8f) else AccessibleYellow,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
                                     Spacer(modifier = Modifier.height(2.dp))
                                     val lastSeen = contact.getLastSeenDisplay()
                                     Text(
-                                        text = buildString {
-                                            if (contact.username.isNotBlank()) append("@${contact.username} • ")
-                                            when {
-                                                contact.isOnline -> append("● En línea")
-                                                lastSeen.isNotBlank() -> append("Últ. vez $lastSeen")
-                                                else -> append("Desconectado")
-                                            }
+                                        text = when {
+                                            contact.isOnline -> "● En línea"
+                                            lastSeen.isNotBlank() -> "Últ. vez $lastSeen"
+                                            else -> "Desconectado"
                                         },
                                         fontSize = 13.sp,
                                         color = if (isFocused) Color(0xFF262626) else if (contact.isOnline) Color(0xFF00E676) else TextSecondaryGray,
