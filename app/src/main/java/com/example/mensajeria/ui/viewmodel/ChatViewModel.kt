@@ -1005,7 +1005,7 @@ class ChatViewModel(
                 !_uiState.value.isIncomingCall &&
                 _uiState.value.activeCallId == callId
             ) {
-                val interval = if (voiceCallService.isWebSocketConnected()) 2000L else 550L
+                val interval = if (voiceCallService.isWebSocketConnected()) 1500L else 220L
                 delay(interval)
                 if (!_uiState.value.isInCall || _uiState.value.activeCallId != callId) break
                 val signals = repository.fetchCallStreamSignals(currentUserId, partner.id)

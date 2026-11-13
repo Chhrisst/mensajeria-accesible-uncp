@@ -63,6 +63,7 @@ class ChatRepository(private val context: Context? = null) {
 
     private val knownMessageIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private val initialSyncedContacts = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    private val decryptedCache = ConcurrentHashMap<String, String>()
 
     init {
         if (context != null) {
@@ -557,9 +558,13 @@ class ChatRepository(private val context: Context? = null) {
         val mapped = apiMsgs.mapNotNull { m ->
             val id = m?.id?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val isFromMe = m.isFromMe || (m.senderId == userId)
-            val clearContent = E2EEncryptionManager.decrypt(m.content ?: "", userId, contactId)
+            val clearContent = decryptedCache.getOrPut("${id}_c") {
+                E2EEncryptionManager.decrypt(m.content ?: "", userId, contactId)
+            }
             val clearAudio = if (!m.audioUrl.isNullOrBlank()) {
-                E2EEncryptionManager.decrypt(m.audioUrl, userId, contactId)
+                decryptedCache.getOrPut("${id}_a") {
+                    E2EEncryptionManager.decrypt(m.audioUrl, userId, contactId)
+                }
             } else ""
             val localMsgTime = formatServerTimeToLocal(m.createdAt ?: "")
 
@@ -656,7 +661,9 @@ class ChatRepository(private val context: Context? = null) {
             val response = RetrofitClient.api.getMessages(userId, contactId)
             val apiMsgs = response.body() ?: return emptyList()
             if (!response.isSuccessful) return emptyList()
-            val parsed = parseApiMessages(userId, contactId, apiMsgs)
+            // Optimización de latencia: para señales y audio en tiempo real, procesar los últimos 20 elementos
+            val msgsToProcess = if (apiMsgs.size > 20) apiMsgs.takeLast(20) else apiMsgs
+            val parsed = parseApiMessages(userId, contactId, msgsToProcess)
             updateContactPresenceFromApiMessages(contactId, parsed)
 
             // Procesar y alertar sobre nuevos mensajes entrantes de este contacto

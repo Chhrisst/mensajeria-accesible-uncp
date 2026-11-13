@@ -431,7 +431,8 @@ class VoiceCallService(private val context: Context) {
             SAMPLE_RATE,
             AudioFormat.CHANNEL_OUT_MONO,
             AudioFormat.ENCODING_PCM_16BIT
-        ).coerceAtLeast(FRAME_BYTES_WS * 2)
+        )
+        val bufSize = if (minOutBuf > 0) maxOf(minOutBuf, FRAME_BYTES_FALLBACK) else FRAME_BYTES_FALLBACK * 2
 
         try {
             val track = AudioTrack.Builder()
@@ -449,7 +450,7 @@ class VoiceCallService(private val context: Context) {
                         .build()
                 )
                 .setTransferMode(AudioTrack.MODE_STREAM)
-                .setBufferSizeInBytes(minOutBuf)
+                .setBufferSizeInBytes(bufSize)
                 .build()
             track.play()
             audioTrack = track
@@ -460,7 +461,7 @@ class VoiceCallService(private val context: Context) {
         playbackThread = Thread {
             while (isStreaming.get()) {
                 try {
-                    val chunk = playbackQueue.poll(250, TimeUnit.MILLISECONDS) ?: continue
+                    val chunk = playbackQueue.poll(100, TimeUnit.MILLISECONDS) ?: continue
                     val track = audioTrack
                     if (track != null && track.playState == AudioTrack.PLAYSTATE_PLAYING) {
                         track.write(chunk, 0, chunk.size)
@@ -545,7 +546,8 @@ class VoiceCallService(private val context: Context) {
                     continue
                 }
 
-                // Verificar energía mínima para no saturar con silencio absoluto en fallback HTTP
+                // Detección de actividad vocal (VAD) para evitar saturar la red con silencio
+                val frameRms = calculateRms(wsFrame, read)
                 val encodedWs = Base64.encodeToString(wsFrame, 0, read, Base64.NO_WRAP)
                 val sentByWs = sendWebSocketSignal(
                     type = "CALL_AUDIO",
@@ -556,8 +558,16 @@ class VoiceCallService(private val context: Context) {
                     audioBase64 = encodedWs
                 )
                 if (!sentByWs) {
-                    httpAccum.write(wsFrame, 0, read)
-                    if (httpAccum.size() >= FRAME_BYTES_FALLBACK) {
+                    if (frameRms >= SILENCE_RMS_THRESHOLD) {
+                        httpAccum.write(wsFrame, 0, read)
+                        if (httpAccum.size() >= FRAME_BYTES_FALLBACK) {
+                            val batch = httpAccum.toByteArray()
+                            httpAccum.reset()
+                            val b64Batch = Base64.encodeToString(batch, Base64.NO_WRAP)
+                            onSendFallbackChunk(b64Batch)
+                        }
+                    } else if (httpAccum.size() > 0) {
+                        // Al detectar transición de voz a silencio, volcar inmediatamente lo acumulado
                         val batch = httpAccum.toByteArray()
                         httpAccum.reset()
                         val b64Batch = Base64.encodeToString(batch, Base64.NO_WRAP)
@@ -573,15 +583,31 @@ class VoiceCallService(private val context: Context) {
         }
     }
 
+    private fun calculateRms(buffer: ByteArray, length: Int): Double {
+        val numSamples = length / 2
+        if (numSamples <= 0) return 0.0
+        var sum = 0.0
+        var i = 0
+        while (i < length - 1) {
+            val sample = ((buffer[i + 1].toInt() shl 8) or (buffer[i].toInt() and 0xFF)).toShort()
+            sum += sample * sample
+            i += 2
+        }
+        return kotlin.math.sqrt(sum / numSamples)
+    }
+
     fun playRemotePcmBase64(audioBase64: String) {
         if (!isStreaming.get() || audioBase64.isBlank()) return
         try {
             val pcm = Base64.decode(audioBase64, Base64.DEFAULT)
             if (pcm.isEmpty()) return
-            if (!playbackQueue.offer(pcm)) {
+
+            // Mitigación de Buffer Bloat: si la cola tiene 2 o más fragmentos acumulados
+            // (por latencia de red previa), descartamos los viejos para escuchar la voz en VIVO.
+            while (playbackQueue.size >= 2) {
                 playbackQueue.poll()
-                playbackQueue.offer(pcm)
             }
+            playbackQueue.offer(pcm)
         } catch (_: Exception) {}
     }
 
@@ -647,7 +673,8 @@ class VoiceCallService(private val context: Context) {
     companion object {
         private const val TAG = "VoiceCallService"
         private const val SAMPLE_RATE = 8000
-        private const val FRAME_BYTES_WS = 5600       // ~350 ms a 8kHz PCM16 Mono
-        private const val FRAME_BYTES_FALLBACK = 10400 // ~650 ms para respaldo HTTP
+        private const val FRAME_BYTES_WS = 1280       // ~80 ms a 8kHz PCM16 Mono (ultra baja latencia)
+        private const val FRAME_BYTES_FALLBACK = 3200 // ~200 ms para respuesta ágil en HTTP
+        private const val SILENCE_RMS_THRESHOLD = 200.0 // Umbral VAD de voz activa
     }
 }
