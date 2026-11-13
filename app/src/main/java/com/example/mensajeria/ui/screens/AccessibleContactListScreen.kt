@@ -82,9 +82,9 @@ fun AccessibleContactListScreen(
     var focusedIndex by remember { mutableIntStateOf(0) }
     val assistantState = voiceAssistantManager?.state?.collectAsState()?.value ?: VoiceAssistantState()
 
-    // Indicación ultra breve y concisa, dicha solo una vez
+    // Indicación ultra breve y concisa al ingresar a la pantalla
     LaunchedEffect(Unit) {
-        authViewModel.ttsService.speak("Contactos. Desliza para explorar.")
+        authViewModel.ttsService.speak("Desliza el dedo para navegar.")
     }
 
     fun focusContact(index: Int) {
@@ -241,22 +241,24 @@ fun AccessibleContactListScreen(
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(150.dp)
-                                .exploreTarget(id = "empty_contacts_card", label = "Sin contactos"),
+                                .exploreTarget(
+                                    id = "empty_contacts_card",
+                                    label = "Aún no tienes contactos. Usa el asistente de voz para agregar contactos."
+                                ),
                             shape = RoundedCornerShape(18.dp),
                             colors = CardDefaults.cardColors(containerColor = DarkCardBackground),
                             border = BorderStroke(2.dp, AccessibleYellow.copy(alpha = 0.5f))
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(20.dp),
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 20.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = "Aún no tienes contactos.\nUsa el Asistente de Voz para agregar contactos por su usuario.",
                                     color = Color.White,
-                                    fontSize = 17.sp,
+                                    fontSize = 16.sp,
                                     fontWeight = FontWeight.Medium,
                                     textAlign = TextAlign.Center
                                 )
