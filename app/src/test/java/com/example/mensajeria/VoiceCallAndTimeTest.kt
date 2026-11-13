@@ -108,7 +108,10 @@ class VoiceCallAndTimeTest {
 
         val seenEarlier = Contact(id = "u2", name = "Mario", isOnline = false, lastSeenTime = "01:06")
         assertEquals("01:06", seenEarlier.getLastSeenDisplay())
-        assertEquals("Conectado última vez a la(s) 01:06", seenEarlier.getConnectionStatusText())
+        assertEquals("Conectado última vez a la 01:06", seenEarlier.getConnectionStatusText())
+
+        val seenAtTwo = Contact(id = "u2b", name = "Mario", isOnline = false, lastSeenTime = "02:15")
+        assertEquals("Conectado última vez a las 02:15", seenAtTwo.getConnectionStatusText())
 
         val online = Contact(id = "u3", name = "Carlos", isOnline = true, lastSeenTime = "01:41")
         assertEquals("En línea", online.getConnectionStatusText())

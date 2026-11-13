@@ -127,12 +127,16 @@ fun MessageBubble(
     }
 
     Card(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(
+            topStart = 16.dp,
+            topEnd = 16.dp,
+            bottomStart = if (isSent) 16.dp else 4.dp,
+            bottomEnd = if (isSent) 4.dp else 16.dp
+        ),
         colors = CardDefaults.cardColors(containerColor = bubbleColor),
-        border = BorderStroke(1.dp, if (isSent) HighContrastYellow else Color.Gray),
+        border = BorderStroke(1.5.dp, if (isSent) HighContrastYellow else Color(0xFF546E7A)),
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
             .clickable { onSpeakMessage(message.text) }
             .semantics {
                 // Solo decir el mensaje tal cual al explorar (sin anteponer nombre ni prefijos)

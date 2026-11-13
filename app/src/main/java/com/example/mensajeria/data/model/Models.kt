@@ -41,7 +41,9 @@ data class Contact(
         if (isOnline == true) return "En línea"
         val lastSeen = getLastSeenDisplay()
         return if (lastSeen.isNotBlank()) {
-            "Conectado última vez a la(s) $lastSeen"
+            val hour = lastSeen.substringBefore(":").trim().toIntOrNull()
+            val prep = if (hour == 1 || hour == 13) "a la" else "a las"
+            "Conectado última vez $prep $lastSeen"
         } else {
             "Desconectado"
         }

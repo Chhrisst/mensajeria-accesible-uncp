@@ -127,57 +127,8 @@ fun AccessibleChatScreen(
             .fillMaxSize()
             .background(PureBlack)
             .navigationBarsPadding()
+            .padding(16.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(uiState.messages, uiState.voiceState) {
-                    awaitPointerEventScope {
-                        var lastLeftTouch = 0L
-                        var lastRightTouch = 0L
-                        var lastConfirmTime = 0L
-
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val now = System.currentTimeMillis()
-                            val width = size.width
-
-                            val pressedPointers = event.changes.filter { it.pressed }
-                            if (pressedPointers.size >= 2) {
-                                val hasLeft = pressedPointers.any { it.position.x < width * 0.45f }
-                                val hasRight = pressedPointers.any { it.position.x > width * 0.55f }
-                                if ((hasLeft && hasRight || pressedPointers.size >= 2) && now - lastConfirmTime > 1000L) {
-                                    lastConfirmTime = now
-                                    event.changes.forEach { it.consume() }
-                                    if (uiState.voiceState == VoiceState.CONFIRMING) {
-                                        chatViewModel.confirmAndSendMessage()
-                                    }
-                                }
-                            } else if (pressedPointers.size == 1) {
-                                val change = pressedPointers[0]
-                                val x = change.position.x
-
-                                if (x < width * 0.40f) {
-                                    lastLeftTouch = now
-                                } else if (x > width * 0.60f) {
-                                    lastRightTouch = now
-                                }
-
-                                if (abs(lastLeftTouch - lastRightTouch) < 500L && now - lastConfirmTime > 1000L) {
-                                    lastConfirmTime = now
-                                    lastLeftTouch = 0L
-                                    lastRightTouch = 0L
-                                    if (uiState.voiceState == VoiceState.CONFIRMING) {
-                                        change.consume()
-                                        chatViewModel.confirmAndSendMessage()
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding(16.dp)
-        ) {
             Column(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.SpaceBetween
@@ -269,25 +220,33 @@ fun AccessibleChatScreen(
                         } else {
                             message.text
                         }
-                        Box(
+                        val isSent = message.isOutgoing
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .exploreTarget(
-                                    id = "chat_msg_${message.id}_$actualIndex",
-                                    label = exploreText,
-                                    onHover = { focusMessage(actualIndex) }
-                                )
-                                .clickable {
-                                    focusMessage(actualIndex)
-                                }
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start
                         ) {
-                            MessageBubble(
-                                message = message,
-                                isPlayingVoiceNote = uiState.playingMessageId == message.id,
-                                onSpeakMessage = {
-                                    focusMessage(actualIndex)
-                                }
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.85f)
+                                    .exploreTarget(
+                                        id = "chat_msg_${message.id}_$actualIndex",
+                                        label = exploreText,
+                                        onHover = { focusMessage(actualIndex) }
+                                    )
+                                    .clickable {
+                                        focusMessage(actualIndex)
+                                    }
+                            ) {
+                                MessageBubble(
+                                    message = message,
+                                    isPlayingVoiceNote = uiState.playingMessageId == message.id,
+                                    onSpeakMessage = {
+                                        focusMessage(actualIndex)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -462,7 +421,6 @@ fun AccessibleChatScreen(
                     }
                 }
             }
-        }
 
         if (uiState.isInCall) {
             VoiceCallOverlay(

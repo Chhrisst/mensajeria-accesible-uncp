@@ -303,7 +303,11 @@ fun StandardContactListScreen(
                             Text(
                                 text = when {
                                     contact.isOnline -> "● En línea"
-                                    lastSeen.isNotBlank() -> "Conectado última vez a la(s) $lastSeen"
+                                    lastSeen.isNotBlank() -> {
+                                        val hour = lastSeen.substringBefore(":").trim().toIntOrNull()
+                                        val prep = if (hour == 1 || hour == 13) "a la" else "a las"
+                                        "Conectado última vez $prep $lastSeen"
+                                    }
                                     else -> "Desconectado"
                                 },
                                 color = if (contact.isOnline) whatsappGreen else TextSecondaryGray,
