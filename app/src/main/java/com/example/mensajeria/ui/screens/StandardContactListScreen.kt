@@ -176,7 +176,7 @@ fun StandardContactListScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Mi usuario: @${currentUser.username.ifBlank { currentUser.name.lowercase().replace(" ", "_") }}",
+                        text = "Mi usuario: @${currentUser.username.ifBlank { currentUser.name.lowercase().replace(" ", "") }}",
                         color = whatsappGreen,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium

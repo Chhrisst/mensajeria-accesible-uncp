@@ -175,7 +175,7 @@ fun AccessibleContactListScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val myHandle = currentUser.username.ifBlank { currentUser.name.lowercase().replace(" ", "_") }
+                val myHandle = currentUser.username.ifBlank { currentUser.name.lowercase().replace(" ", "") }
                 Column(
                     modifier = Modifier.exploreTarget(
                         id = "user_header",

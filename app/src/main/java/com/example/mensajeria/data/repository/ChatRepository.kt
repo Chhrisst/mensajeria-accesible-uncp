@@ -337,7 +337,7 @@ class ChatRepository(private val context: Context? = null) {
         val newContact = Contact(
             id = "c_${System.currentTimeMillis()}",
             name = name.trim(),
-            username = name.trim().lowercase().replace(" ", "_"),
+            username = name.trim().lowercase().replace(" ", ""),
             description = description.ifBlank { if (phone.isNotBlank()) "Tel: $phone" else "Contacto UNCP" },
             isOnline = true
         )

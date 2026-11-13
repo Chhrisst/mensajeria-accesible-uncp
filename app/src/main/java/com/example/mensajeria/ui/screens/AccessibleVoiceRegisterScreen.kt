@@ -119,7 +119,10 @@ fun AccessibleVoiceRegisterScreen(
                     authViewModel.startRegistrationVoiceInput(
                         onResult = { rawUsername ->
                             isListening = false
-                            val cleanUser = rawUsername.trim().lowercase().replace(" ", "_")
+                            val cleanUser = rawUsername.trim().lowercase()
+                                .replace("guión bajo", "_")
+                                .replace("guion bajo", "_")
+                                .replace(" ", "")
                                 .filter { it.isLetterOrDigit() || it == '_' }
                             if (cleanUser.length < 3) {
                                 feedbackText = "El usuario debe tener al menos 3 letras. Pulsa el botón de voz para reintentar."

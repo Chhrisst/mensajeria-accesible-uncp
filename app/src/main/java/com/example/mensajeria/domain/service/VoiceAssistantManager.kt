@@ -360,7 +360,7 @@ class VoiceAssistantManager(
 
         if (q.contains("nombre de usuario") || q.contains("mi usuario") || q.contains("como me llamo") || q.contains("quien soy") || q.contains("cual es mi cuenta")) {
             val fullName = getCurrentUser().ifBlank { "Usuario" }
-            val handle = getCurrentUsername().ifBlank { fullName.lowercase().replace(" ", "_") }
+            val handle = getCurrentUsername().ifBlank { fullName.lowercase().replace(" ", "") }
             return VoiceCommandResult(
                 action = "GENERAL_REPLY",
                 spokenResponse = "Tu nombre es $fullName y tu nombre de usuario único es arroba $handle."
