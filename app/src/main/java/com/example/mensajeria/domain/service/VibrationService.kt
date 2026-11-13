@@ -121,6 +121,21 @@ class VibrationService(context: Context) {
         }
     }
 
+    fun vibrateMessageReceived() {
+        // Vibración distintiva para anunciar un nuevo mensaje entrante
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator?.vibrate(
+                VibrationEffect.createWaveform(
+                    longArrayOf(0, 60, 80, 100),
+                    -1
+                )
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator?.vibrate(longArrayOf(0, 60, 80, 100), -1)
+        }
+    }
+
     fun vibrateError() {
         // Pulso largo indicando error o cancelación
         vibrate(180)

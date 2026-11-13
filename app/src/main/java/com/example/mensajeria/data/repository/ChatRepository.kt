@@ -59,6 +59,10 @@ class ChatRepository(private val context: Context? = null) {
 
     @Volatile var onCallStreamMessagesLoaded: ((contactId: String, signals: List<DecryptedCallStreamItem>) -> Unit)? = null
     @Volatile var onCallSignalDetectedFromContact: ((Contact, String) -> Unit)? = null
+    @Volatile var onNewIncomingMessageReceived: ((Contact, Message) -> Unit)? = null
+
+    private val knownMessageIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    private val initialSyncedContacts = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
     init {
         if (context != null) {
@@ -70,7 +74,15 @@ class ChatRepository(private val context: Context? = null) {
 
     fun setSessionUser(userId: String) {
         currentActiveUserId = userId
+        knownMessageIds.clear()
+        initialSyncedContacts.clear()
         loadPersistedContacts(userId)
+        for (c in _contacts.value) {
+            val local = loadPersistedMessages(userId, c.id)
+            for (m in local) {
+                if (m.id.isNotBlank()) knownMessageIds.add(m.id)
+            }
+        }
     }
 
     private fun getContactsPrefKey(userId: String): String {
@@ -470,6 +482,10 @@ class ChatRepository(private val context: Context? = null) {
                 val merged = parsed.messages + pendingLocal
                 _messages.value = merged
                 persistMessages(userId, contactId)
+
+                // Alertar si entraron mensajes nuevos mientras se está en la conversación activa
+                processIncomingMessages(userId, contactId, parsed.messages)
+
                 merged
             } else {
                 Log.w(TAG, "getMessages respondió HTTP ${response.code()}")
@@ -604,11 +620,47 @@ class ChatRepository(private val context: Context? = null) {
             if (!response.isSuccessful) return emptyList()
             val parsed = parseApiMessages(userId, contactId, apiMsgs)
             updateContactPresenceFromApiMessages(contactId, parsed)
+
+            // Procesar y alertar sobre nuevos mensajes entrantes de este contacto
+            processIncomingMessages(userId, contactId, parsed.messages)
+
             parsed.callSignals
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
             emptyList()
+        }
+    }
+
+    private fun processIncomingMessages(userId: String, contactId: String, remoteMessages: List<Message>) {
+        if (remoteMessages.isEmpty()) return
+        val contact = _contacts.value.firstOrNull { it.id == contactId } ?: Contact(id = contactId, name = "Contacto")
+        val isFirstSync = initialSyncedContacts.add(contactId)
+
+        if (isFirstSync) {
+            // Primer sincronizado de este contacto en esta sesión: sembrar IDs existentes sin alertar
+            for (m in remoteMessages) {
+                if (m.id.isNotBlank()) knownMessageIds.add(m.id)
+            }
+            return
+        }
+
+        // Buscar mensajes entrantes (!isOutgoing) no procesados
+        val newIncoming = remoteMessages.filter { !it.isOutgoing && it.id.isNotBlank() && knownMessageIds.add(it.id) }
+        if (newIncoming.isNotEmpty()) {
+            val conversationKey = getMessagesPrefKey(userId, contactId)
+            if (conversationKey == currentConversationKey) {
+                val currentIds = _messages.value.mapTo(HashSet()) { it.id }
+                val toAdd = newIncoming.filter { it.id !in currentIds }
+                if (toAdd.isNotEmpty()) {
+                    _messages.update { it + toAdd }
+                }
+            }
+            persistMessages(userId, contactId)
+
+            for (msg in newIncoming) {
+                onNewIncomingMessageReceived?.invoke(contact, msg)
+            }
         }
     }
 

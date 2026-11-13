@@ -9,8 +9,10 @@ import com.example.mensajeria.data.api.GeminiDirectClient
 import com.example.mensajeria.data.api.RetrofitClient
 import com.example.mensajeria.data.model.ChatUiState
 import com.example.mensajeria.data.model.Contact
+import com.example.mensajeria.data.model.Message
 import com.example.mensajeria.data.model.VoiceState
 import com.example.mensajeria.data.repository.ChatRepository
+import kotlinx.coroutines.Dispatchers
 import com.example.mensajeria.domain.service.CallSignalParser
 import com.example.mensajeria.domain.service.CallSignalType
 import com.example.mensajeria.domain.service.DecryptedCallStreamItem
@@ -115,6 +117,10 @@ class ChatViewModel(
 
         repository.onCallStreamMessagesLoaded = { contactId, items ->
             processCallStreamSignals(contactId, items)
+        }
+
+        repository.onNewIncomingMessageReceived = { senderContact, message ->
+            handleIncomingMessageNotification(senderContact, message)
         }
 
         repository.onCallSignalDetectedFromContact = { contact, rawContent ->
@@ -475,8 +481,36 @@ class ChatViewModel(
             return
         }
         currentUserId = cleanId
+        repository.setSessionUser(cleanId)
         voiceCallService.connectWebSocket(cleanId)
         startIncomingCallMonitor()
+    }
+
+    private fun handleIncomingMessageNotification(senderContact: Contact, message: Message) {
+        viewModelScope.launch(Dispatchers.Main) {
+            // 1. Tono agradable y nítido de mensaje nuevo
+            soundService.playMessageReceivedSound()
+
+            // 2. Vibración háptica de nuevo mensaje
+            vibrationService.vibrateMessageReceived()
+
+            // 3. Anuncio por voz del Asistente
+            val isCurrentChatOpen = (_uiState.value.contact.id == senderContact.id)
+            val announcement = if (message.isVoiceNote) {
+                if (isCurrentChatOpen) {
+                    "${senderContact.name} te envió una nota de voz."
+                } else {
+                    "Nuevo mensaje de voz de ${senderContact.name}."
+                }
+            } else {
+                if (isCurrentChatOpen) {
+                    "${senderContact.name}: ${message.text}"
+                } else {
+                    "Mensaje de ${senderContact.name}: ${message.text}"
+                }
+            }
+            ttsService.speak(announcement)
+        }
     }
 
     private fun startIncomingCallMonitor() {
@@ -497,7 +531,7 @@ class ChatViewModel(
                     broadcastPresenceSignal(CallSignalType.PRESENCE, uid, uname, activeContacts)
                 }
                 if (!_uiState.value.isInCall) {
-                    for (c in activeContacts.take(8)) {
+                    for (c in activeContacts.take(16)) {
                         if (_uiState.value.isInCall || currentUserId != uid) break
                         val signals = repository.fetchCallStreamSignals(uid, c.id)
                         if (signals.isNotEmpty()) {

@@ -311,12 +311,17 @@ class SoundNotificationService(private val context: Context) {
             val notificationUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
             val ringtone: Ringtone? = RingtoneManager.getRingtone(context, notificationUri)
             ringtone?.audioAttributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                 .build()
             ringtone?.play()
-        } catch (_: Exception) {
-            playListeningPromptSound()
-        }
+        } catch (_: Exception) {}
+
+        // Tono cálido en canal multimedia como garantía auditiva para accesibilidad
+        playHarmonicNotes(
+            notes = listOf(659.25 to 75, 880.0 to 110),
+            gapMs = 15,
+            volume = 0.85
+        )
     }
 }
