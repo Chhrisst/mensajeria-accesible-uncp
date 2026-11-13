@@ -138,9 +138,9 @@ fun AccessibleVoiceRegisterScreen(
                                     )
                                 } else {
                                     registeredUsername = cleanUser
-                                    feedbackText = "Usuario @$cleanUser disponible. Crea tu combinación de toques."
+                                    feedbackText = "Usuario @$cleanUser disponible. Crea tu contraseña de toques."
                                     authViewModel.ttsService.speak(
-                                        "Nombre de usuario $cleanUser disponible. Pulsa de izquierda a derecha cuatro veces para crear una combinación única."
+                                        "Nombre de usuario $cleanUser disponible. Pulsa de izquierda a derecha cuatro veces para crear una contraseña."
                                     )
                                 }
                             }
@@ -397,7 +397,7 @@ fun AccessibleVoiceRegisterScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Pulsa de izquierda a derecha 4 veces para crear una combinación única",
+                        text = "Pulsa de izquierda a derecha 4 veces para crear una contraseña",
                         fontSize = 15.sp,
                         color = TextSecondaryGray,
                         textAlign = TextAlign.Center

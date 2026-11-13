@@ -151,7 +151,7 @@ fun AccessibleVoiceLoginScreen(
             isListeningName = false
             feedbackText = "Cuenta detectada: ${detectedUser?.name}."
             authViewModel.ttsService.speak(
-                "Cuenta detectada: ${detectedUser?.name}. Pulsa de izquierda a derecha cuatro veces para ingresar tu combinación."
+                "Cuenta detectada: ${detectedUser?.name}. Pulsa de izquierda a derecha cuatro veces para ingresar tu contraseña."
             )
         }
     }
@@ -307,7 +307,7 @@ fun AccessibleVoiceLoginScreen(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "Pulsa de izquierda a derecha 4 veces para ingresar tu combinación",
+                        text = "Pulsa de izquierda a derecha 4 veces para ingresar tu contraseña",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = AccessibleYellow,
