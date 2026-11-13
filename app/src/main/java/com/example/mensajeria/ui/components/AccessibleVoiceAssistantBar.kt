@@ -30,6 +30,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -59,8 +62,16 @@ import com.example.mensajeria.ui.theme.PureBlack
 fun AccessibleVoiceAssistantBar(
     state: VoiceAssistantState,
     onAssistantClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    detailedInstructions: String = "Asistente de Voz IA. Pulsa para enviar mensaje de texto, nota de voz o consultar."
 ) {
+    var hasAnnouncedInstructions by rememberSaveable { mutableStateOf(false) }
+    val currentExploreLabel = if (!hasAnnouncedInstructions) {
+        detailedInstructions
+    } else {
+        "Asistente de Voz IA"
+    }
+
     val isActivelyCapturing = state.mode == AssistantMode.ACTIVE_LISTENING || state.mode == AssistantMode.PROCESSING
     val infiniteTransition = rememberInfiniteTransition(label = "assistant_pulse")
     val scaleAnim by infiniteTransition.animateFloat(
@@ -98,14 +109,24 @@ fun AccessibleVoiceAssistantBar(
         modifier = modifier
             .fillMaxWidth()
             .height(82.dp)
-            .exploreTarget(id = "voice_assistant_bar", label = "Asistente de voz IA. Pulsa para enviar mensaje de texto, nota de voz o consultar.")
+            .exploreTarget(
+                id = "voice_assistant_bar",
+                label = currentExploreLabel,
+                onHover = {
+                    hasAnnouncedInstructions = true
+                }
+            )
             .clickable(role = Role.Button) {
                 playAccessibleClickFeedback(context)
                 onAssistantClick()
             }
             .semantics {
                 this.role = Role.Button
-                this.contentDescription = "$statusTitle. ${state.feedbackMessage}. Pulsa para activar la voz."
+                this.contentDescription = if (!hasAnnouncedInstructions) {
+                    "$detailedInstructions. Pulsa para activar la voz."
+                } else {
+                    "$statusTitle. Pulsa para activar la voz."
+                }
                 this.liveRegion = LiveRegionMode.Polite
             },
         shape = RoundedCornerShape(20.dp),

@@ -29,25 +29,30 @@ data class ExploreTarget(
 
 class TouchExploreRegistry {
     private val targets = LinkedHashMap<String, LayoutCoordinates>()
-    private val labels = LinkedHashMap<String, String>()
-    private val onHovers = LinkedHashMap<String, (() -> Unit)?>()
+    private val labelProviders = LinkedHashMap<String, () -> String>()
+    private val onHovers = LinkedHashMap<String, () -> (() -> Unit)?>()
     var hostCoordinates: LayoutCoordinates? = null
 
-    fun register(id: String, label: String, coordinates: LayoutCoordinates, onHover: (() -> Unit)? = null) {
+    fun register(
+        id: String,
+        labelProvider: () -> String,
+        coordinates: LayoutCoordinates,
+        onHover: () -> (() -> Unit)?
+    ) {
         targets[id] = coordinates
-        labels[id] = label
+        labelProviders[id] = labelProvider
         onHovers[id] = onHover
     }
 
     fun unregister(id: String) {
         targets.remove(id)
-        labels.remove(id)
+        labelProviders.remove(id)
         onHovers.remove(id)
     }
 
     fun clear() {
         targets.clear()
-        labels.clear()
+        labelProviders.clear()
         onHovers.clear()
     }
 
@@ -72,9 +77,9 @@ class TouchExploreRegistry {
                         minArea = area
                         bestTarget = ExploreTarget(
                             id = id,
-                            label = labels[id] ?: "",
+                            label = labelProviders[id]?.invoke().orEmpty(),
                             bounds = bounds,
-                            onHover = onHovers[id]
+                            onHover = onHovers[id]?.invoke()
                         )
                     }
                 }
@@ -111,9 +116,9 @@ fun Modifier.exploreTarget(
             if (coordinates.isAttached) {
                 registry.register(
                     id = id,
-                    label = currentLabel.value,
+                    labelProvider = { currentLabel.value },
                     coordinates = coordinates,
-                    onHover = currentOnHover.value
+                    onHover = { currentOnHover.value }
                 )
             }
         }

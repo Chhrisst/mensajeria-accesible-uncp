@@ -364,6 +364,7 @@ fun AccessibleContactListScreen(
             if (voiceAssistantManager != null) {
                 AccessibleVoiceAssistantBar(
                     state = assistantState,
+                    detailedInstructions = "Asistente de Voz IA. Pulsa para agregar contactos por su usuario o hacer consultas.",
                     onAssistantClick = {
                         voiceAssistantManager.triggerExplicitActivation()
                     }

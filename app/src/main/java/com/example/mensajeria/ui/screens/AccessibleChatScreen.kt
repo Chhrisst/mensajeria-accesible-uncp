@@ -442,6 +442,7 @@ fun AccessibleChatScreen(
                     if (voiceAssistantManager != null) {
                         AccessibleVoiceAssistantBar(
                             state = assistantState,
+                            detailedInstructions = "Asistente de Voz IA. Pulsa para enviar mensaje de texto, nota de voz o consultar.",
                             onAssistantClick = {
                                 voiceAssistantManager.triggerExplicitActivation()
                             }
@@ -449,6 +450,7 @@ fun AccessibleChatScreen(
                     } else {
                         AccessibleVoiceAssistantBar(
                             state = VoiceAssistantState(feedbackMessage = "Pulsa para dictar mensaje o enviar audio"),
+                            detailedInstructions = "Asistente de Voz IA. Pulsa para enviar mensaje de texto, nota de voz o consultar.",
                             onAssistantClick = {
                                 chatViewModel.soundService.playButtonClickSound()
                                 chatViewModel.ttsService.speak(
