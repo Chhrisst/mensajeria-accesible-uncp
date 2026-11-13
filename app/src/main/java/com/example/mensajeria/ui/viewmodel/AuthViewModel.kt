@@ -36,6 +36,7 @@ class AuthViewModel(
     val speechService = SpeechService(context)
     val vibrationService = com.example.mensajeria.domain.service.VibrationService.getInstance(context)
     val soundService = com.example.mensajeria.domain.service.SoundNotificationService.getInstance(context)
+    var isDisabilityMode: Boolean = true
     val ttsService = TextToSpeechService(context) {
         // Inicializado correctamente sin disparar audio automático
     }
@@ -344,13 +345,17 @@ class AuthViewModel(
                 vibrationService.vibrateSuccess()
                 authRepository.loginWithProfile(found)
                 _uiState.update { it.copy(authenticatedUser = found) }
-                ttsService.speak("Bienvenido ${found.name}. Accediendo a sus mensajes.")
+                if (found.hasDisability && isDisabilityMode) {
+                    ttsService.speak("Bienvenido ${found.name}. Accediendo a sus mensajes.")
+                }
                 onSuccess(found)
             }.onFailure { err ->
                 vibrationService.vibrateError()
                 val msg = if (err.message?.contains("Credenciales") == true) "Contraseña o PIN incorrecto." else "Usuario o correo no encontrado."
                 onError(msg)
-                ttsService.speak(msg)
+                if (isDisabilityMode) {
+                    ttsService.speak(msg)
+                }
             }
         }
     }
@@ -568,7 +573,11 @@ class AuthViewModel(
             LoginUiState(feedbackMessage = "Sesión cerrada correctamente.")
         }
         resetVoiceAuth()
-        ttsService.speak("Sesión cerrada correctamente.")
+        if (isDisabilityMode) {
+            ttsService.speak("Sesión cerrada correctamente.")
+        } else {
+            ttsService.stop()
+        }
     }
 
     override fun onCleared() {

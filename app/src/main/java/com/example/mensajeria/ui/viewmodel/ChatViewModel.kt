@@ -494,13 +494,15 @@ class ChatViewModel(
             // 2. Vibración háptica de nuevo mensaje
             vibrationService.vibrateMessageReceived()
 
-            // 3. Anuncio por voz del Asistente
-            val announcement = if (message.isVoiceNote) {
-                "Nuevo mensaje de voz de ${senderContact.name}."
-            } else {
-                "Nuevo mensaje de ${senderContact.name}: ${message.text}"
+            // 3. Anuncio por voz del Asistente (solo activo en modo con discapacidad)
+            if (isDisabilityMode) {
+                val announcement = if (message.isVoiceNote) {
+                    "Nuevo mensaje de voz de ${senderContact.name}."
+                } else {
+                    "Nuevo mensaje de ${senderContact.name}: ${message.text}"
+                }
+                ttsService.speak(announcement)
             }
-            ttsService.speak(announcement)
         }
     }
 

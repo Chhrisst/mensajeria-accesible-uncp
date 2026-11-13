@@ -124,17 +124,25 @@ class VoiceAssistantManager(
     var getCurrentUserId: () -> String = { "" }
     var getActiveChatContact: () -> Contact? = { null }
 
+    @Volatile var isEnabled: Boolean = true
     private var isDestroyed = false
 
+    fun setAssistantEnabled(enabled: Boolean) {
+        isEnabled = enabled
+        if (!enabled) {
+            stopAssistant()
+        }
+    }
+
     fun activateAssistant() {
-        if (isDestroyed) return
+        if (isDestroyed || !isEnabled) return
         startListeningTurn(isFollowUp = false)
     }
 
     fun triggerExplicitActivation() = activateAssistant()
 
     private fun startListeningTurn(isFollowUp: Boolean) {
-        if (isDestroyed) return
+        if (isDestroyed || !isEnabled) return
         mainHandler.removeCallbacks(reactivateRunnable)
         mainHandler.removeCallbacks(speakingWatchdog)
         processingJob?.cancel()
@@ -181,6 +189,10 @@ class VoiceAssistantManager(
     }
 
     private fun processCommandPhrase(rawText: String, token: Long) {
+        if (isDestroyed || !isEnabled || token != interactionToken) {
+            stopAssistant()
+            return
+        }
         val cleanCommand = cleanWakePrefixes(rawText)
         if (cleanCommand.isBlank()) {
             stopAssistant()

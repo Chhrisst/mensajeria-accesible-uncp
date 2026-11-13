@@ -250,7 +250,17 @@ fun MensajeriaApp(
     androidx.compose.runtime.LaunchedEffect(currentScreen, selectedContact, currentUser, isDisabilityMode) {
         navPrefs.edit().putBoolean("is_disability_mode", isDisabilityMode).apply()
         if (currentUser.id.isNotBlank()) {
-            chatViewModel.isDisabilityMode = currentUser.hasDisability
+            val isStandard = when (currentScreen) {
+                AppFlowScreen.STANDARD_LOGIN,
+                AppFlowScreen.STANDARD_REGISTER,
+                AppFlowScreen.STANDARD_CONTACTS,
+                AppFlowScreen.STANDARD_CHAT -> true
+                else -> false
+            }
+            val hasDisability = if (isStandard) false else (currentUser.hasDisability && isDisabilityMode)
+            chatViewModel.isDisabilityMode = hasDisability
+            authViewModel.isDisabilityMode = hasDisability
+            voiceAssistantManager.setAssistantEnabled(hasDisability)
             chatViewModel.bindUserSession(currentUser.id, currentUser.name)
             if (currentScreen == AppFlowScreen.ACCESSIBLE_CONTACTS ||
                 currentScreen == AppFlowScreen.ACCESSIBLE_CHAT ||
@@ -316,11 +326,41 @@ fun MensajeriaApp(
         }
     }
 
-    val inAccessibleSession = currentScreen == AppFlowScreen.ACCESSIBLE_CONTACTS ||
-        currentScreen == AppFlowScreen.ACCESSIBLE_CHAT
-    androidx.compose.runtime.LaunchedEffect(inAccessibleSession, currentUser.id) {
-        if (!inAccessibleSession || currentUser.id.isBlank()) {
-            voiceAssistantManager.stopAssistant()
+    val isStandardScreen = when (currentScreen) {
+        AppFlowScreen.STANDARD_LOGIN,
+        AppFlowScreen.STANDARD_REGISTER,
+        AppFlowScreen.STANDARD_CONTACTS,
+        AppFlowScreen.STANDARD_CHAT -> true
+        else -> false
+    }
+
+    val isAccessibleScreen = when (currentScreen) {
+        AppFlowScreen.ACCESSIBLE_WELCOME,
+        AppFlowScreen.ACCESSIBLE_VOICE_LOGIN,
+        AppFlowScreen.ACCESSIBLE_VOICE_REG,
+        AppFlowScreen.ACCESSIBLE_CONTACTS,
+        AppFlowScreen.ACCESSIBLE_CHAT -> true
+        else -> false
+    }
+
+    // Al entrar al modo sin discapacidad, el asistente se desactiva por completo; al entrar al modo accesible se activa con normalidad
+    androidx.compose.runtime.LaunchedEffect(currentScreen, isDisabilityMode) {
+        if (isStandardScreen || !isDisabilityMode) {
+            isDisabilityMode = false
+            chatViewModel.isDisabilityMode = false
+            authViewModel.isDisabilityMode = false
+            voiceAssistantManager.setAssistantEnabled(false)
+            authViewModel.ttsService.stop()
+            chatViewModel.ttsService.stop()
+        } else if (isAccessibleScreen) {
+            isDisabilityMode = true
+            chatViewModel.isDisabilityMode = true
+            authViewModel.isDisabilityMode = true
+            voiceAssistantManager.setAssistantEnabled(true)
+            val inAccessibleActiveSession = (currentScreen == AppFlowScreen.ACCESSIBLE_CONTACTS || currentScreen == AppFlowScreen.ACCESSIBLE_CHAT) && currentUser.id.isNotBlank()
+            if (!inAccessibleActiveSession) {
+                voiceAssistantManager.stopAssistant()
+            }
         }
     }
 
@@ -376,10 +416,15 @@ fun MensajeriaApp(
                 onSelectMode = { hasDisability ->
                     isDisabilityMode = hasDisability
                     chatViewModel.isDisabilityMode = hasDisability
-                    currentScreen = if (hasDisability) {
-                        AppFlowScreen.ACCESSIBLE_WELCOME
+                    authViewModel.isDisabilityMode = hasDisability
+                    if (hasDisability) {
+                        voiceAssistantManager.setAssistantEnabled(true)
+                        currentScreen = AppFlowScreen.ACCESSIBLE_WELCOME
                     } else {
-                        AppFlowScreen.STANDARD_LOGIN
+                        voiceAssistantManager.setAssistantEnabled(false)
+                        authViewModel.ttsService.stop()
+                        chatViewModel.ttsService.stop()
+                        currentScreen = AppFlowScreen.STANDARD_LOGIN
                     }
                 },
                 onSpeakAnnouncement = { text ->
