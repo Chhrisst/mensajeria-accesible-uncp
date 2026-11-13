@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -26,6 +27,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,7 +61,10 @@ fun StandardLoginScreen(
 ) {
     var userOrEmail by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var userError by remember { mutableStateOf<String?>(null) }
+    var passwordError by remember { mutableStateOf<String?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    val isLoading = authViewModel.uiState.collectAsState().value.isLoading
 
     val whatsappGreen = Color(0xFF25D366)
     val cardDark = Color(0xFF1F2C34)
@@ -138,8 +143,12 @@ fun StandardLoginScreen(
                     value = userOrEmail,
                     onValueChange = {
                         userOrEmail = it
+                        userError = null
                         errorMessage = null
                     },
+                    isError = userError != null,
+                    supportingText = userError?.let { { Text(it, color = ErrorRed) } },
+                    enabled = !isLoading,
                     label = { Text("Usuario o correo") },
                     leadingIcon = {
                         Icon(Icons.Default.Person, contentDescription = null, tint = whatsappGreen)
@@ -166,8 +175,12 @@ fun StandardLoginScreen(
                     value = password,
                     onValueChange = {
                         password = it
+                        passwordError = null
                         errorMessage = null
                     },
+                    isError = passwordError != null,
+                    supportingText = passwordError?.let { { Text(it, color = ErrorRed) } },
+                    enabled = !isLoading,
                     label = { Text("Contraseña o PIN") },
                     leadingIcon = {
                         Icon(Icons.Default.Lock, contentDescription = null, tint = whatsappGreen)
@@ -201,9 +214,9 @@ fun StandardLoginScreen(
 
                 Button(
                     onClick = {
-                        if (userOrEmail.isBlank()) {
-                            errorMessage = "Ingresa tu usuario o correo."
-                        } else {
+                        userError = AuthViewModel.validateUserOrEmail(userOrEmail)
+                        passwordError = if (password.isBlank()) "Ingresa tu contraseña o PIN (no solo espacios)." else null
+                        if (userError == null && passwordError == null) {
                             authViewModel.loginManual(
                                 userOrEmail,
                                 password,
@@ -212,6 +225,7 @@ fun StandardLoginScreen(
                             )
                         }
                     },
+                    enabled = !isLoading,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp),
@@ -221,11 +235,15 @@ fun StandardLoginScreen(
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text(
-                        text = "Iniciar Sesión",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    if (isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp), color = PureBlack, strokeWidth = 2.dp)
+                    } else {
+                        Text(
+                            text = "Iniciar Sesión",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
 

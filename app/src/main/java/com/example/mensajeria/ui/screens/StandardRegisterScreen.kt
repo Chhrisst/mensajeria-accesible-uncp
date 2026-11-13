@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,6 +30,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.mensajeria.data.model.RegistrationForm
 import com.example.mensajeria.data.model.UserProfile
+import com.example.mensajeria.ui.theme.ErrorRed
 import com.example.mensajeria.ui.theme.PureBlack
 import com.example.mensajeria.ui.theme.TextSecondaryGray
 import com.example.mensajeria.ui.viewmodel.AuthViewModel
@@ -59,6 +63,11 @@ fun StandardRegisterScreen(
     var email by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var nameError by remember { mutableStateOf<String?>(null) }
+    var emailError by remember { mutableStateOf<String?>(null) }
+    var passwordError by remember { mutableStateOf<String?>(null) }
+    var submitError by remember { mutableStateOf<String?>(null) }
+    val isLoading = authViewModel.uiState.collectAsState().value.isLoading
 
     val whatsappGreen = Color(0xFF25D366)
     val cardDark = Color(0xFF1F2C34)
@@ -105,7 +114,10 @@ fun StandardRegisterScreen(
 
             OutlinedTextField(
                 value = fullName,
-                onValueChange = { fullName = it },
+                onValueChange = { fullName = it; nameError = null; submitError = null },
+                isError = nameError != null,
+                supportingText = nameError?.let { { Text(it, color = ErrorRed) } },
+                enabled = !isLoading,
                 label = { Text("Nombre completo") },
                 leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = whatsappGreen) },
                 modifier = Modifier.fillMaxWidth(),
@@ -126,7 +138,10 @@ fun StandardRegisterScreen(
 
             OutlinedTextField(
                 value = email,
-                onValueChange = { email = it },
+                onValueChange = { email = it; emailError = null; submitError = null },
+                isError = emailError != null,
+                supportingText = emailError?.let { { Text(it, color = ErrorRed) } },
+                enabled = !isLoading,
                 label = { Text("Correo electrónico") },
                 leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = whatsappGreen) },
                 modifier = Modifier.fillMaxWidth(),
@@ -148,6 +163,7 @@ fun StandardRegisterScreen(
             OutlinedTextField(
                 value = phone,
                 onValueChange = { phone = it },
+                enabled = !isLoading,
                 label = { Text("Número de celular") },
                 leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = whatsappGreen) },
                 modifier = Modifier.fillMaxWidth(),
@@ -168,7 +184,10 @@ fun StandardRegisterScreen(
 
             OutlinedTextField(
                 value = password,
-                onValueChange = { password = it },
+                onValueChange = { password = it; passwordError = null; submitError = null },
+                isError = passwordError != null,
+                supportingText = passwordError?.let { { Text(it, color = ErrorRed) } },
+                enabled = !isLoading,
                 label = { Text("Contraseña") },
                 leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = whatsappGreen) },
                 visualTransformation = PasswordVisualTransformation(),
@@ -190,19 +209,24 @@ fun StandardRegisterScreen(
 
             Button(
                 onClick = {
+                    nameError = if (fullName.isBlank()) "Ingresa tu nombre completo." else null
+                    emailError = AuthViewModel.validateEmail(email)
+                    passwordError = AuthViewModel.validatePassword(password)
+                    if (nameError != null || emailError != null || passwordError != null) return@Button
                     authViewModel.registerManual(
                         RegistrationForm(
-                            fullName = fullName.ifBlank { "Usuario Registrado" },
-                            email = email,
-                            phone = phone,
-                            pin = password.ifBlank { "123" },
+                            fullName = fullName.trim(),
+                            email = email.trim(),
+                            phone = phone.trim(),
+                            pin = password,
                             hasDisability = false,
                             visualCondition = "Sin discapacidad"
                         ),
                         onSuccess = { newUser -> onRegistrationSuccess(newUser) },
-                        onError = { /* fallback automático */ }
+                        onError = { err -> submitError = err }
                     )
                 },
+                enabled = !isLoading,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
@@ -212,11 +236,20 @@ fun StandardRegisterScreen(
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text(
-                    text = "Registrarme",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(22.dp), color = PureBlack, strokeWidth = 2.dp)
+                } else {
+                    Text(
+                        text = "Registrarme",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            submitError?.let {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(text = it, color = ErrorRed, fontSize = 14.sp)
             }
         }
     }

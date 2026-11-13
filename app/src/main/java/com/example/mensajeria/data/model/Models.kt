@@ -136,7 +136,8 @@ data class LoginUiState(
     val voiceState: VoiceState = VoiceState.IDLE,
     val recognizedText: String = "",
     val feedbackMessage: String = "Bienvenido a Asistente de Voz. Inicie sesión para continuar.",
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val isLoading: Boolean = false
 )
 
 /**

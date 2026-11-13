@@ -328,11 +328,13 @@ class AuthViewModel(
     ) {
         if (isAuthRequestInFlight) return
         isAuthRequestInFlight = true
+        _uiState.update { it.copy(isLoading = true) }
         viewModelScope.launch {
             val result = try {
-                authRepository.loginRemote(userOrEmail, passwordOrPin)
+                authRepository.loginRemote(userOrEmail.trim(), passwordOrPin)
             } finally {
                 isAuthRequestInFlight = false
+                _uiState.update { it.copy(isLoading = false) }
             }
             result.onSuccess { found ->
                 vibrationService.vibrateSuccess()
@@ -349,6 +351,32 @@ class AuthViewModel(
         }
     }
 
+    companion object {
+        private val EMAIL_REGEX = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
+        const val MIN_PASSWORD_LENGTH = 6
+
+        /** Devuelve un mensaje de error en español, o null si el correo es válido. */
+        fun validateEmail(email: String): String? = when {
+            email.isBlank() -> "Ingresa tu correo electrónico."
+            !EMAIL_REGEX.matches(email.trim()) -> "Formato de correo inválido (ej. nombre@dominio.com)."
+            else -> null
+        }
+
+        /** Devuelve un mensaje de error en español, o null si la contraseña es válida. */
+        fun validatePassword(password: String): String? = when {
+            password.isBlank() -> "Ingresa una contraseña (no solo espacios)."
+            password.length < MIN_PASSWORD_LENGTH -> "La contraseña debe tener al menos $MIN_PASSWORD_LENGTH caracteres."
+            else -> null
+        }
+
+        /** Login acepta usuario o correo: si contiene '@' se valida como correo. */
+        fun validateUserOrEmail(input: String): String? = when {
+            input.isBlank() -> "Ingresa tu usuario o correo."
+            '@' in input -> validateEmail(input)
+            else -> null
+        }
+    }
+
     fun registerManual(
         form: RegistrationForm,
         onSuccess: (UserProfile) -> Unit,
@@ -356,11 +384,13 @@ class AuthViewModel(
     ) {
         if (isAuthRequestInFlight) return
         isAuthRequestInFlight = true
+        _uiState.update { it.copy(isLoading = true) }
         viewModelScope.launch {
             val result = try {
                 authRepository.registerRemote(form)
             } finally {
                 isAuthRequestInFlight = false
+                _uiState.update { it.copy(isLoading = false) }
             }
             result.onSuccess { newUser ->
                 vibrationService.vibrateSuccess()
